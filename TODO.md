@@ -3,3 +3,4 @@
 - Implementar creación de índices en base de datos.
 - Trigger inicial que identifique y registre nuevo archivo de landing en file_control y gatille ingesta.
 - Refinar estrategia de particiones del data lake.
+- Extraer hardcoded values (ej. Listas TCs transformers.py) a archivos JSON de configuración.

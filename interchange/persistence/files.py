@@ -84,14 +84,15 @@ class FileStorage:
         encoding: str = "Latin-1",
     ) -> DataFrame:
         """
-        Reads all lines of a plaintext file and returns a dataframe of the lines.
+        Reads all non-empty lines of a plaintext file and returns a line dataframe.
         """
         try:
             log.logger.debug(f"Searching for {client_id} file {file_id}...")
             filepath = self._get_file_path(layer, client_id, file_id, subdir)
             with open(filepath, mode="r", encoding=encoding) as file:
                 log.logger.debug(f"Opening {client_id} file {file_id}...")
-                return DataFrame(file.readlines(), columns=["lines"], dtype=str)
+                df = DataFrame(file.read().split("\n"), columns=["lines"], dtype=str)
+                return df[df["lines"] != ""]
         except OSError as e:
             log.logger.error(f"Error opening {client_id} file {file_id}: '{e}'")
             return DataFrame([], columns=["lines"], dtype=str)
