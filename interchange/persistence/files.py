@@ -2,7 +2,7 @@ import os
 from enum import StrEnum, auto
 
 import dotenv
-from pandas import DataFrame
+import pandas as pd
 
 from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
@@ -82,20 +82,20 @@ class FileStorage:
         file_id: str,
         subdir: str = "",
         encoding: str = "Latin-1",
-    ) -> DataFrame:
+    ) -> pd.DataFrame:
         """
         Reads all non-empty lines of a plaintext file and returns a line dataframe.
         """
         try:
-            log.logger.debug(f"Searching for {client_id} file {file_id}...")
+            log.logger.debug(f"Searching for {client_id} file {file_id}")
             filepath = self._get_file_path(layer, client_id, file_id, subdir)
             with open(filepath, mode="r", encoding=encoding) as file:
-                log.logger.debug(f"Opening {client_id} file {file_id}...")
-                df = DataFrame(file.read().split("\n"), columns=["lines"], dtype=str)
+                log.logger.debug(f"Opening {client_id} file {file_id}")
+                df = pd.DataFrame(file.read().split("\n"), columns=["lines"], dtype=str)
                 return df[df["lines"] != ""]
         except OSError as e:
             log.logger.error(f"Error opening {client_id} file {file_id}: '{e}'")
-            return DataFrame([], columns=["lines"], dtype=str)
+            return pd.DataFrame([], columns=["lines"], dtype=str)
 
     def write_plaintext(self) -> None:
         raise NotImplementedError
@@ -109,5 +109,18 @@ class FileStorage:
     def read_parquet(self) -> None:
         raise NotImplementedError
 
-    def write_parquet(self) -> None:
-        raise NotImplementedError
+    def write_parquet(
+        self,
+        data: pd.DataFrame,
+        layer: Layer,
+        client_id: str,
+        file_id: str,
+        subdir: str = "",
+    ) -> None:
+        """
+        Write the given dataframe to a parquet file. Overwrites file if exists.
+        """
+        log.logger.debug(f"Writing {client_id} file {file_id} to parquet")
+        filepath = f"{self._get_file_path(layer, client_id, file_id, subdir)}.parquet"
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        data.to_parquet(filepath, index=True)

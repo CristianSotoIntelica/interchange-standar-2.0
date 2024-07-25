@@ -12,7 +12,7 @@ log = Logger(__name__)
 if __name__ == "__main__":
     db = Database()
 
-    log.logger.info("Creating 'client' table...")
+    log.logger.info("Creating 'client' table")
     db.create_table(
         table_name="client",
         fields_def={
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         },
     )
 
-    log.logger.info("Creating 'file_control' table...")
+    log.logger.info("Creating 'file_control' table")
     db.create_table(
         table_name="file_control",
         fields_def={
