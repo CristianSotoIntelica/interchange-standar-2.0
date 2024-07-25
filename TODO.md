@@ -1,0 +1,5 @@
+- Implementar pruebas unitarias.
+- Implementar llaves primarias en creación de tablas de base de datos.
+- Implementar creación de índices en base de datos.
+- Trigger inicial que identifique y registre nuevo archivo de landing en file_control y gatille ingesta.
+- Refinar estrategia de particiones del data lake.
