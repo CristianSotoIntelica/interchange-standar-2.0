@@ -106,8 +106,14 @@ class FileStorage:
     def write_binary(self) -> None:
         raise NotImplementedError
 
-    def read_parquet(self) -> None:
-        raise NotImplementedError
+    def read_parquet(
+        self, layer: Layer, client_id: str, file_id: str, subdir: str = ""
+    ) -> pd.DataFrame:
+        """
+        Read the given parquet file into a dataframe.
+        """
+        filepath = f"{self._get_file_path(layer, client_id, file_id, subdir)}.parquet"
+        return pd.read_parquet(filepath)
 
     def write_parquet(
         self,

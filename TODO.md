@@ -5,3 +5,4 @@
 - Refinar estrategia de particiones del data lake.
 - Extraer hardcoded values (ej. Listas TCs transformers.py) a archivos JSON de configuración.
 - Transformadores para Visa SMS y VSS
+- Copiar archivos originales de landing en una carpeta 'originals' dentro de 'operational'.

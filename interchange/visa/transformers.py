@@ -23,6 +23,9 @@ def _load_as_ctf_format(client_id: str, file_id: str) -> pd.Series:
 
 
 def transform_baseii_drafts(client_id: str, file_id: str) -> None:
+    """
+    Pivot draft sequence numbers into individual rows of complete raw transactions.
+    """
     VALID_TC = ["05", "06", "07", "25", "26", "27"]
     VALID_TCSN = ["0", "1", "2", "3", "4", "5", "6", "7"]
     log.logger.info(f"Opening {client_id} Visa interchange file {file_id} as CTF")
