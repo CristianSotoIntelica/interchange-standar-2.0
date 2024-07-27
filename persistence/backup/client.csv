@@ -1,0 +1,2 @@
+client_id,client_name,file_mc_block_in,file_mc_block_out,file_mc_encoding_in,file_mc_encoding_out,file_iar_block,file_iar_encoding,local_currency_code,settlement_currency_code,report_currency_code,issuing_bins_6_digits,issuing_bins_8_digits,acquiring_bins,customer_country,duplicate_on_us_flag_visa,duplicate_on_us_flag_mastercard
+DEMO,Demo Client,TRUE,TRUE,cp500,cp500,TRUE,cp500,DOP,USD,DOP,,,,DOM,FALSE,FALSE

@@ -55,3 +55,20 @@ if __name__ == "__main__":
             "process_finish_ts": "DATETIME",
         },
     )
+
+    log.logger.info("Creating 'visa_fields' table")
+    db.create_table(
+        table_name="visa_fields",
+        fields_def={
+            "type_record": "TEXT",
+            "tcsn": "TEXT",
+            "position": "INT",
+            "length": "INT",
+            "column_name": "TEXT",
+            "secondary_identifier_pos": "INT",
+            "secondary_identifier_len": "INT",
+            "secondary_identifier": "TEXT",
+            "column_type": "TEXT",
+            "float_decimals": "INT",
+        },
+    )
