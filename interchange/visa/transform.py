@@ -61,7 +61,7 @@ def transform_baseii_drafts(
         & ctf_records.str.slice(start=3, stop=4).isin(VALID_TCSN)
     ]
     drafts_df = _pivot_values_on_key(drafts, start=3, stop=4, cols=VALID_TCSN)
-    log.logger.info(f"Saving Raw BASE II Drafts from {client_id} file {file_id}")
+    log.logger.info(f"Saving Raw BASE II Transactions from {client_id} file {file_id}")
     fs.write_parquet(drafts_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
