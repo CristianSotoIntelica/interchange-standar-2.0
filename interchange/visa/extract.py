@@ -40,7 +40,7 @@ def _load_visa_field_definitions(type_record: str, sort_by: list[str]) -> pd.Dat
     return fd.sort_values(sort_by, ascending=True)
 
 
-def extract_baseii_drafts(
+def extract_baseii_fields(
     origin_layer: FileStorage.Layer,
     target_layer: FileStorage.Layer,
     client_id: str,
@@ -92,9 +92,9 @@ def extract_baseii_drafts(
     fs.write_parquet(extract_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
-def extract_sms_messages() -> None:
+def extract_sms_fields() -> None:
     raise NotImplementedError
 
 
-def extract_baseii_vss() -> None:
+def extract_vss_fields() -> None:
     raise NotImplementedError

@@ -69,5 +69,5 @@ def transform_sms_messages() -> None:
     raise NotImplementedError
 
 
-def transform_baseii_vss() -> None:
+def transform_vss_records() -> None:
     raise NotImplementedError
