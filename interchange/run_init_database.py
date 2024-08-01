@@ -70,5 +70,6 @@ if __name__ == "__main__":
             "secondary_identifier": "TEXT",
             "column_type": "TEXT",
             "float_decimals": "INT",
+            "date_format": "TEXT",
         },
     )

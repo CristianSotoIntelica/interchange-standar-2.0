@@ -7,3 +7,5 @@
 - Transformadores para Visa SMS y VSS
 - Copiar archivos originales de landing en una carpeta 'originals' dentro de 'operational'.
 - Actualizar estados de los archivos en 'file_control'.
+- Añadir campo para ARN completo (sin partir o alterar).
+- Verificar descripciones dentro de tablas maestras.
