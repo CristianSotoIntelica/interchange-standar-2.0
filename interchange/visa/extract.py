@@ -55,7 +55,7 @@ def extract_baseii_fields(
     field_defs = _load_visa_field_definitions(
         "draft", sort_by=["tcsn", "position", "secondary_identifier_len"]
     )
-    log.logger.info(f"Reading Raw BASE Transactions from {client_id} file {file_id}")
+    log.logger.info(f"Reading Raw BASE II Transactions from {client_id} file {file_id}")
     data = fs.read_parquet(
         origin_layer,
         client_id,

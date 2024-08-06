@@ -9,3 +9,4 @@
 - Actualizar estados de los archivos en 'file_control'.
 - Añadir campo para ARN completo (sin partir o alterar).
 - Verificar descripciones dentro de tablas maestras.
+- Crear módulo 'common.py' bajo Visa (y Mastercard) para centralizar funciones de uso común / frecuente.
