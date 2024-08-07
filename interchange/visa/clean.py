@@ -11,11 +11,6 @@ log = Logger(__name__)
 fs = FileStorage()
 
 
-"""
-NOTE: THIS CODE STILL NEEDS COMMENTING AND LOG MESSAGES!!!
-"""
-
-
 def _load_visa_field_definitions(type_record: str, sort_by: list[str]) -> pd.DataFrame:
     """
     Return a dataframe of Visa field definitions ordered by specific fields.
@@ -43,6 +38,9 @@ def _retrieve_file_date(
     client_id: str,
     file_id: str,
 ) -> str:
+    """
+    Retrieve a file's processing date in 'YYYY-MM-DD' string format.
+    """
     db = Database()
     file_date = db.read_records(
         table_name="file_control",
@@ -61,6 +59,9 @@ def _retrieve_file_date(
 
 
 def _parse_dates(date_series: pd.Series, date_format: str, file_date: str) -> pd.Series:
+    """
+    Parse a series of formatted string dates into datetime objects.
+    """
     FILE_DATE_FORMAT = "%Y-%m-%d"
     reference_date = datetime.strptime(file_date, FILE_DATE_FORMAT)
     match date_format:
@@ -90,6 +91,9 @@ def _parse_dates(date_series: pd.Series, date_format: str, file_date: str) -> pd
 def _clean_field_values(
     field_series: pd.Series, field_defs: pd.DataFrame, file_date: str
 ) -> pd.Series:
+    """
+    Perform data cleaning on a series of values depending on its target data type.
+    """
     name = field_series.name
     definition = field_defs[field_defs["column_name"] == name].iloc[0]
     match definition["column_type"]:
