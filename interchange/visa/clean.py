@@ -150,9 +150,9 @@ def clean_baseii_fields(
     for _, field_series in data.items():
         clean_field = _clean_field_values(field_series, field_defs, file_date)
         fields.append(clean_field)
-    extract_df = pd.concat(fields, axis=1)
+    clean_df = pd.concat(fields, axis=1)
     log.logger.info(f"Saving Visa Draft clean fields from {client_id} file {file_id}")
-    fs.write_parquet(extract_df, target_layer, client_id, file_id, subdir=target_subdir)
+    fs.write_parquet(clean_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
 def clean_sms_fields() -> None:
