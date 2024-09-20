@@ -14,65 +14,6 @@ log = Logger(__name__)
 fs = FileStorage()
 
 
-def get_file_date(client_id: str, file_id: str) -> date:
-    """
-    Get the processing date of an interchange file.
-    """
-    date_field = "file_processing_date"
-    db = Database()
-    fd = db.read_records(
-        table_name="file_control",
-        fields=[date_field],
-        where={"client_id": client_id, "file_id": file_id},
-    )
-    fd[date_field] = pd.to_datetime(fd[date_field], format="%Y-%m-%d").dt.date
-    return fd[date_field].iloc[0]
-
-
-def get_visa_ardef(file_date: date) -> pd.DataFrame:
-    """
-    Return a dataframe of Visa ARDEF records valid for the file_id's date.
-    """
-    db = Database()
-    fd = db.read_records(
-        table_name="visa_ardef",
-        fields=[
-            "low_key_for_range",
-            "table_key",
-            "effective_date",
-            "valid_until",
-            "account_funding_source",
-            "ardef_country",
-            "ardef_region",
-            "b2b_program_id",
-            "fast_funds",
-            "nnss_indicator",
-            "product_id",
-            "product_subtype",
-            "technology_indicator",
-            "travel_indicator",
-        ],
-        where={"delete_indicator": " "},
-    )
-    int_cols = ["low_key_for_range", "table_key"]
-    fd[int_cols] = fd[int_cols].apply(
-        pd.to_numeric, downcast="integer", errors="coerce"
-    )
-    date_cols = ["effective_date", "valid_until"]
-    for col in date_cols:
-        fd[col] = pd.to_datetime(fd[col], format="%Y-%m-%d", errors="coerce").dt.date
-    fd["valid_until"] = fd["valid_until"].fillna(file_date)
-    fd = fd[(file_date >= fd["effective_date"]) & (file_date <= fd["valid_until"])]
-    fd = fd.sort_values(
-        ["table_key", "effective_date", "low_key_for_range"],
-        ascending=[True, False, True],
-    )
-    fd = fd.drop_duplicates(subset="table_key", keep="first")
-    fd = fd.drop_duplicates(subset="low_key_for_range", keep="first")
-    fd = fd.reset_index(drop=True)
-    return fd
-
-
 class CalculatedField(ABC):
     """
     Abstract base class that all calculated field objects must inherit from.
@@ -81,6 +22,19 @@ class CalculatedField(ABC):
     def __init__(self, ardef_data: pd.DataFrame) -> None:
         super().__init__()
         self.ardef = ardef_data
+
+    def _get_from_ardef(self, intervals: pd.Series, ardef_field: str) -> pd.Series:
+        """
+        Get an ARDEF field's values corresponding to a series of account intervals.
+        """
+        df = intervals.to_frame()
+        df = pd.merge(
+            df,
+            self.ardef[["account_interval", ardef_field]],
+            on="account_interval",
+            how="left",
+        )
+        return df[ardef_field]
 
     @abstractmethod
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
@@ -92,7 +46,11 @@ class CalculatedField(ABC):
 
 class ardef_country(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(source["account_interval"], "ardef_country")
+            case _:
+                raise NotImplementedError
 
 
 class authorization_code_valid(CalculatedField):
@@ -117,7 +75,13 @@ class authorization_code_valid(CalculatedField):
 
 class b2b_program_id(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "b2b_program_id"
+                )
+            case _:
+                raise NotImplementedError
 
 
 class business_mode(CalculatedField):
@@ -171,17 +135,31 @@ class business_transaction_type(CalculatedField):
 
 class fast_funds(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(source["account_interval"], "fast_funds")
+            case _:
+                raise NotImplementedError
 
 
 class funding_source(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "account_funding_source"
+                )
+            case _:
+                raise NotImplementedError
 
 
 class issuer_country(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(source["account_interval"], "country")
+            case _:
+                raise NotImplementedError
 
 
 class jurisdiction(CalculatedField):
@@ -206,17 +184,33 @@ class jurisdiction_region(CalculatedField):
 
 class nnss_indicator(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "nnss_indicator"
+                )
+            case _:
+                raise NotImplementedError
 
 
 class product_id(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(source["account_interval"], "product_id")
+            case _:
+                raise NotImplementedError
 
 
 class product_subtype(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "product_subtype"
+                )
+            case _:
+                raise NotImplementedError
 
 
 class reversal_indicator(CalculatedField):
@@ -234,7 +228,13 @@ class reversal_indicator(CalculatedField):
 
 class technology_indicator(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "technology_indicator"
+                )
+            case _:
+                raise NotImplementedError
 
 
 class timeliness(CalculatedField):
@@ -250,7 +250,83 @@ class timeliness(CalculatedField):
 
 class travel_indicator(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "travel_indicator"
+                )
+            case _:
+                raise NotImplementedError
+
+
+def _get_file_date(client_id: str, file_id: str) -> date:
+    """
+    Get the processing date of an interchange file.
+    """
+    date_field = "file_processing_date"
+    db = Database()
+    fd = db.read_records(
+        table_name="file_control",
+        fields=[date_field],
+        where={"client_id": client_id, "file_id": file_id},
+    )
+    fd[date_field] = pd.to_datetime(fd[date_field], format="%Y-%m-%d").dt.date
+    return fd[date_field].iloc[0]
+
+
+def _get_visa_ardef(file_date: date) -> pd.DataFrame:
+    """
+    Return a dataframe of Visa ARDEF records valid for the file_id's date.
+    """
+    db = Database()
+    fd = db.read_records(
+        table_name="visa_ardef",
+        fields=[
+            "low_key_for_range",
+            "table_key",
+            "effective_date",
+            "valid_until",
+            "account_funding_source",
+            "ardef_country",
+            "ardef_region",
+            "b2b_program_id",
+            "country",
+            "fast_funds",
+            "nnss_indicator",
+            "product_id",
+            "product_subtype",
+            "technology_indicator",
+            "travel_indicator",
+        ],
+        where={"delete_indicator": " "},
+    )
+    # Clean integer fields.
+    int_cols = ["low_key_for_range", "table_key"]
+    fd[int_cols] = fd[int_cols].apply(
+        pd.to_numeric, downcast="integer", errors="coerce"
+    )
+    # Clean date fields and default empty "valid_until" to file's date.
+    date_cols = ["effective_date", "valid_until"]
+    for col in date_cols:
+        fd[col] = pd.to_datetime(fd[col], format="%Y-%m-%d", errors="coerce").dt.date
+    fd["valid_until"] = fd["valid_until"].fillna(file_date)
+    # Filter out ranges that are not valid for the file's date.
+    fd = fd[(file_date >= fd["effective_date"]) & (file_date <= fd["valid_until"])]
+    # Remove duplicate keys and ranges that overlap with a previous range.
+    fd = fd.sort_values(
+        ["table_key", "effective_date", "low_key_for_range"],
+        ascending=[True, False, True],
+    )
+    fd = fd.drop_duplicates(subset="table_key", keep="first")
+    fd = fd.drop_duplicates(subset="low_key_for_range", keep="first")
+    fd["previous_table_key"] = fd["table_key"].shift(1)
+    fd["overlap"] = fd["low_key_for_range"] <= fd["previous_table_key"]
+    fd = fd[~fd["overlap"]].drop(columns=["previous_table_key", "overlap"])
+    # Add an interval column to facilitate merge with transactions.
+    fd["account_interval"] = pd.IntervalIndex.from_tuples(
+        list(zip(fd["low_key_for_range"], fd["table_key"])), closed="both"
+    )
+    return fd.reset_index(drop=True)
 
 
 def calculate_baseii_fields(
@@ -274,29 +350,33 @@ def calculate_baseii_fields(
         subdir=origin_subdir,
     )
     log.logger.info(f"Reading Visa ARDEF data for {client_id} file {file_id}")
-    file_date = get_file_date(client_id, file_id)
-    ardef_data = get_visa_ardef(file_date)
+    file_date = _get_file_date(client_id, file_id)
+    ardef_data = _get_visa_ardef(file_date)
     log.logger.info(f"Calculating additional fields from {client_id} file {file_id}")
+    data["account_interval"] = pd.cut(
+        data["account_number"].str.slice(0, 9).astype(int),
+        ardef_data["account_interval"],
+    )
     BASEII_FIELDS: list[Type[CalculatedField]] = [
-        # ardef_country,
+        ardef_country,
         authorization_code_valid,
-        # b2b_program_id,
+        b2b_program_id,
         # business_mode,
         business_transaction_type,
-        # fast_funds,
-        # funding_source,
-        # issuer_country,
+        fast_funds,
+        funding_source,
+        issuer_country,
         # jurisdiction,
         # jurisdiction_assigned,
         # jurisdiction_country,
         # jurisdiction_region,
-        # nnss_indicator,
-        # product_id,
-        # product_subtype,
+        nnss_indicator,
+        product_id,
+        product_subtype,
         reversal_indicator,
-        # technology_indicator,
+        technology_indicator,
         timeliness,
-        # travel_indicator,
+        travel_indicator,
     ]
     fields = []
     for field in BASEII_FIELDS:
