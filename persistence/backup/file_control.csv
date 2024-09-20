@@ -1,4 +1,0 @@
-client_id,file_id,brand_id,file_type,landing_file_name,landing_parent_zip_name,file_processing_date,total_records,control_status,initial_pid,initial_tid,process_start_ts,process_finish_ts
-DEMO,9E9A06DE985E84466159FDAACC7AB196,VI,IN,INCOMING010120240403.ASCII.EPIN.EPIN.txt,,2024-07-24,,,,,,
-DEMO,CDA26F0BEB4349D03346A721DDCF0DC7,VI,OUT,VAO_00000458905_20230901_000_770_I.OUT,,2023-09-01,,,,,,
-DEMO,0A34F405E89F868E71010AD019D466AC,VI,OUT,VAO_170.OUT,,2023-09-01,,,,,,

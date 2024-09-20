@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import date
 from typing import Type
 
 import numpy as np
@@ -13,10 +14,73 @@ log = Logger(__name__)
 fs = FileStorage()
 
 
+def get_file_date(client_id: str, file_id: str) -> date:
+    """
+    Get the processing date of an interchange file.
+    """
+    date_field = "file_processing_date"
+    db = Database()
+    fd = db.read_records(
+        table_name="file_control",
+        fields=[date_field],
+        where={"client_id": client_id, "file_id": file_id},
+    )
+    fd[date_field] = pd.to_datetime(fd[date_field], format="%Y-%m-%d").dt.date
+    return fd[date_field].iloc[0]
+
+
+def get_visa_ardef(file_date: date) -> pd.DataFrame:
+    """
+    Return a dataframe of Visa ARDEF records valid for the file_id's date.
+    """
+    db = Database()
+    fd = db.read_records(
+        table_name="visa_ardef",
+        fields=[
+            "low_key_for_range",
+            "table_key",
+            "effective_date",
+            "valid_until",
+            "account_funding_source",
+            "ardef_country",
+            "ardef_region",
+            "b2b_program_id",
+            "fast_funds",
+            "nnss_indicator",
+            "product_id",
+            "product_subtype",
+            "technology_indicator",
+            "travel_indicator",
+        ],
+        where={"delete_indicator": " "},
+    )
+    int_cols = ["low_key_for_range", "table_key"]
+    fd[int_cols] = fd[int_cols].apply(
+        pd.to_numeric, downcast="integer", errors="coerce"
+    )
+    date_cols = ["effective_date", "valid_until"]
+    for col in date_cols:
+        fd[col] = pd.to_datetime(fd[col], format="%Y-%m-%d", errors="coerce").dt.date
+    fd["valid_until"] = fd["valid_until"].fillna(file_date)
+    fd = fd[(file_date >= fd["effective_date"]) & (file_date <= fd["valid_until"])]
+    fd = fd.sort_values(
+        ["table_key", "effective_date", "low_key_for_range"],
+        ascending=[True, False, True],
+    )
+    fd = fd.drop_duplicates(subset="table_key", keep="first")
+    fd = fd.drop_duplicates(subset="low_key_for_range", keep="first")
+    fd = fd.reset_index(drop=True)
+    return fd
+
+
 class CalculatedField(ABC):
     """
     Abstract base class that all calculated field objects must inherit from.
     """
+
+    def __init__(self, ardef_data: pd.DataFrame) -> None:
+        super().__init__()
+        self.ardef = ardef_data
 
     @abstractmethod
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
@@ -209,6 +273,9 @@ def calculate_baseii_fields(
         file_id,
         subdir=origin_subdir,
     )
+    log.logger.info(f"Reading Visa ARDEF data for {client_id} file {file_id}")
+    file_date = get_file_date(client_id, file_id)
+    ardef_data = get_visa_ardef(file_date)
     log.logger.info(f"Calculating additional fields from {client_id} file {file_id}")
     BASEII_FIELDS: list[Type[CalculatedField]] = [
         # ardef_country,
@@ -233,7 +300,7 @@ def calculate_baseii_fields(
     ]
     fields = []
     for field in BASEII_FIELDS:
-        calculated_field = field().calculate(data, type_record="draft")
+        calculated_field = field(ardef_data).calculate(data, type_record="draft")
         calculated_field.name = field.__name__
         fields.append(calculated_field)
     calculated_df = pd.concat(fields, axis=1)
