@@ -19,8 +19,12 @@ class CalculatedField(ABC):
     Abstract base class that all calculated field objects must inherit from.
     """
 
-    def __init__(self, ardef_data: pd.DataFrame) -> None:
+    def __init__(
+        self, client_data: pd.Series, file_data: pd.Series, ardef_data: pd.DataFrame
+    ) -> None:
         super().__init__()
+        self.client = client_data
+        self.file = file_data
         self.ardef = ardef_data
 
     def _get_from_ardef(self, intervals: pd.Series, ardef_field: str) -> pd.Series:
@@ -259,19 +263,45 @@ class travel_indicator(CalculatedField):
                 raise NotImplementedError
 
 
-def _get_file_date(client_id: str, file_id: str) -> date:
+def _get_client_data(client_id: str) -> pd.Series:
     """
-    Get the processing date of an interchange file.
+    Get key metadata associated to a client.
     """
-    date_field = "file_processing_date"
+    db = Database()
+    fd = db.read_records(
+        table_name="client",
+        fields=[
+            "local_currency_code",
+            "settlement_currency_code",
+            "report_currency_code",
+            "issuing_bins_6_digits",
+            "issuing_bins_8_digits",
+            "acquiring_bins",
+            "customer_country",
+        ],
+        where={"client_id": client_id},
+    )
+    return fd.iloc[0]
+
+
+def _get_file_data(client_id: str, file_id: str) -> pd.Series:
+    """
+    Get key metadata associated to an interchange file.
+    """
     db = Database()
     fd = db.read_records(
         table_name="file_control",
-        fields=[date_field],
+        fields=[
+            "brand_id",
+            "file_type",
+            "file_processing_date",
+        ],
         where={"client_id": client_id, "file_id": file_id},
     )
-    fd[date_field] = pd.to_datetime(fd[date_field], format="%Y-%m-%d").dt.date
-    return fd[date_field].iloc[0]
+    fd["file_processing_date"] = pd.to_datetime(
+        fd["file_processing_date"], format="%Y-%m-%d"
+    ).dt.date
+    return fd.iloc[0]
 
 
 def _get_visa_ardef(file_date: date) -> pd.DataFrame:
@@ -349,9 +379,10 @@ def calculate_baseii_fields(
         file_id,
         subdir=origin_subdir,
     )
-    log.logger.info(f"Reading Visa ARDEF data for {client_id} file {file_id}")
-    file_date = _get_file_date(client_id, file_id)
-    ardef_data = _get_visa_ardef(file_date)
+    log.logger.info(f"Reading additional metadata for {client_id} file {file_id}")
+    client_data = _get_client_data(client_id)
+    file_data = _get_file_data(client_id, file_id)
+    ardef_data = _get_visa_ardef(file_data["file_processing_date"])
     log.logger.info(f"Calculating additional fields from {client_id} file {file_id}")
     data["account_interval"] = pd.cut(
         data["account_number"].str.slice(0, 9).astype(int),
@@ -380,7 +411,11 @@ def calculate_baseii_fields(
     ]
     fields = []
     for field in BASEII_FIELDS:
-        calculated_field = field(ardef_data).calculate(data, type_record="draft")
+        calculated_field = field(
+            client_data,
+            file_data,
+            ardef_data,
+        ).calculate(data, type_record="draft")
         calculated_field.name = field.__name__
         fields.append(calculated_field)
     calculated_df = pd.concat(fields, axis=1)
