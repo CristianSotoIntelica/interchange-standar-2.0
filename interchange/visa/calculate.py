@@ -191,22 +191,174 @@ class issuer_country(CalculatedField):
 
 class jurisdiction(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        db = Database()
+        country = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        )
+        country.rename(
+            columns={
+                "country_code": "merchant_country_code",
+                "visa_region_code": "merchant_region_code",
+            },
+            inplace=True,
+        )
+        ar_countries = self._get_from_ardef(source["account_interval"], "ardef_country")
+        ar_countries.name = "ardef_country"
+        ar_regions = self._get_from_ardef(source["account_interval"], "ardef_region")
+        ar_regions.name = "ardef_region"
+        issuing_bins_6 = str(self.client["issuing_bins_6_digits"]).split(",")
+        issuing_bins_8 = str(self.client["issuing_bins_8_digits"]).split(",")
+        acquiring_bins = str(self.client["acquiring_bins"]).split(",")
+        match type_record:
+            case "draft":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    on="merchant_country_code",
+                )
+                source = source.join(ar_countries, how="left")
+                source = source.join(ar_regions, how="left")
+                conditions = [
+                    (
+                        (source["merchant_country_code"] == source["ardef_country"])
+                        & (self.file["file_type"] == "OUT")
+                        & (
+                            (source["collection_only_flag"] == "C")
+                            | (
+                                source["account_number"]
+                                .str.slice(0, 6)
+                                .isin(issuing_bins_6)
+                            )
+                            | (
+                                source["account_number"]
+                                .str.slice(0, 8)
+                                .isin(issuing_bins_8)
+                            )
+                        )
+                    ),
+                    (
+                        (source["merchant_country_code"] == source["ardef_country"])
+                        & (self.file["file_type"] == "IN")
+                        & (
+                            (source["collection_only_flag"] == "C")
+                            | (
+                                source["account_reference_number_acquiring_identifier"]
+                                .astype(str)
+                                .str.zfill(6)
+                                .isin(acquiring_bins)
+                            )
+                        )
+                    ),
+                    (source["merchant_country_code"] == source["ardef_country"]),
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] == source["ardef_region"])
+                    ),
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] != source["ardef_region"])
+                    ),
+                ]
+                condition_values = [
+                    "on-us",
+                    "on-us",
+                    "off-us",
+                    "intraregional",
+                    "interregional",
+                ]
+                return pd.Series(np.select(conditions, condition_values, default=""))
+            case _:
+                raise NotImplementedError
 
 
 class jurisdiction_assigned(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        db = Database()
+        country = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        )
+        country.rename(
+            columns={
+                "country_code": "merchant_country_code",
+                "visa_region_code": "merchant_region_code",
+            },
+            inplace=True,
+        )
+        ar_countries = self._get_from_ardef(source["account_interval"], "ardef_country")
+        ar_countries.name = "ardef_country"
+        ar_regions = self._get_from_ardef(source["account_interval"], "ardef_region")
+        ar_regions.name = "ardef_region"
+        match type_record:
+            case "draft":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    on="merchant_country_code",
+                )
+                source = source.join(ar_countries, how="left")
+                source = source.join(ar_regions, how="left")
+                source["jurisdiction_assigned"] = ""  # Initialize field
+                source.loc[
+                    (source["merchant_country_code"] == source["ardef_country"]),
+                    "jurisdiction_assigned",
+                ] = source["merchant_country_code"]
+                source.loc[
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] == source["ardef_region"])
+                    ),
+                    "jurisdiction_assigned",
+                ] = source["ardef_region"]
+                source.loc[
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] != source["ardef_region"])
+                    ),
+                    "jurisdiction_assigned",
+                ] = "9"  # Interregional
+                return source["jurisdiction_assigned"]
+            case _:
+                raise NotImplementedError
 
 
 class jurisdiction_country(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                return source["merchant_country_code"]
+            case _:
+                raise NotImplementedError
 
 
 class jurisdiction_region(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        db = Database()
+        country = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        )
+        country.rename(
+            columns={
+                "country_code": "merchant_country_code",
+                "visa_region_code": "merchant_region_code",
+            },
+            inplace=True,
+        )
+        match type_record:
+            case "draft":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    on="merchant_country_code",
+                )
+                return source["merchant_region_code"]
+            case _:
+                raise NotImplementedError
 
 
 class nnss_indicator(CalculatedField):
@@ -420,10 +572,10 @@ def calculate_baseii_fields(
         fast_funds,
         funding_source,
         issuer_country,
-        # jurisdiction,
-        # jurisdiction_assigned,
-        # jurisdiction_country,
-        # jurisdiction_region,
+        jurisdiction,
+        jurisdiction_assigned,
+        jurisdiction_country,
+        jurisdiction_region,
         nnss_indicator,
         product_id,
         product_subtype,
@@ -456,8 +608,3 @@ def calculate_sms_fields() -> None:
 
 def calculate_vss_fields() -> None:
     raise NotImplementedError
-
-
-# calculate_baseii_fields(
-#     fs.Layer.STAGING, fs.Layer.STAGING, "DEMO", "0A34F405E89F868E71010AD019D466AC"
-# )

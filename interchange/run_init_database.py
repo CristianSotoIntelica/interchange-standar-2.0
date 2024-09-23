@@ -36,6 +36,20 @@ if __name__ == "__main__":
         },
     )
 
+    log.logger.info("Creating 'country' table")
+    db.create_table(
+        table_name="country",
+        fields_def={
+            "country_numeric": "TEXT",
+            "country_code": "TEXT",
+            "country_code_alternative": "TEXT",
+            "country_name": "TEXT",
+            "visa_region_code": "TEXT",
+            "mastercard_region_code": "TEXT",
+            "legacy_country_id": "INT",
+        },
+    )
+
     log.logger.info("Creating 'file_control' table")
     db.create_table(
         table_name="file_control",
