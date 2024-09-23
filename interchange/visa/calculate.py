@@ -562,6 +562,14 @@ def calculate_baseii_fields(
     data["account_interval"] = pd.cut(
         data["account_number"].str.slice(0, 9).astype(int),
         ardef_data["account_interval"],
+        include_lowest=True,
+    )
+    fill_interval = pd.Interval(left=0, right=0, closed="both")
+    data["account_interval"] = data["account_interval"].cat.add_categories(
+        [fill_interval]
+    )
+    data["account_interval"] = data["account_interval"].where(
+        data["account_interval"].notna(), fill_interval
     )
     BASEII_FIELDS: list[Type[CalculatedField]] = [
         ardef_country,
