@@ -90,7 +90,30 @@ class b2b_program_id(CalculatedField):
 
 class business_mode(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
-        raise NotImplementedError
+        match type_record:
+            case "draft":
+                conditions = [
+                    (
+                        source["draft_code"].isin(["05", "25", "06", "26", "07", "27"])
+                        & (self.file["file_type"] == "OUT")
+                    ),
+                    (
+                        source["draft_code"].isin(["15", "35", "16", "36", "17", "37"])
+                        & (self.file["file_type"] == "OUT")
+                    ),
+                    (
+                        source["draft_code"].isin(["05", "25", "06", "26", "07", "27"])
+                        & (self.file["file_type"] == "IN")
+                    ),
+                    (
+                        source["draft_code"].isin(["15", "35", "16", "36", "17", "37"])
+                        & (self.file["file_type"] == "IN")
+                    ),
+                ]
+                condition_values = ["A", "I", "I", "A"]  # Acquiring or Issuing
+                return pd.Series(np.select(conditions, condition_values, default=""))
+            case _:
+                raise NotImplementedError
 
 
 class business_transaction_type(CalculatedField):
@@ -392,7 +415,7 @@ def calculate_baseii_fields(
         ardef_country,
         authorization_code_valid,
         b2b_program_id,
-        # business_mode,
+        business_mode,
         business_transaction_type,
         fast_funds,
         funding_source,
