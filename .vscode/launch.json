@@ -9,6 +9,12 @@
             "type": "debugpy",
             "request": "launch",
             "module": "interchange.visa.calculate"
+        },
+        {
+            "name": "interchange.visa.interchange",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "interchange.visa.interchange"
         }
     ]
 }
