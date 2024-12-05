@@ -50,6 +50,17 @@ if __name__ == "__main__":
         },
     )
 
+    log.logger.info("Creating 'currency' table")
+    db.create_table(
+        table_name="currency",
+        fields_def={
+            "currency_numeric_code": "TEXT",
+            "currency_alphabetic_code": "TEXT",
+            "currency_decimal_separator": "INT",
+            "currency_name": "TEXT",
+        },
+    )
+
     log.logger.info("Creating 'file_control' table")
     db.create_table(
         table_name="file_control",

@@ -10,6 +10,8 @@ from interchange.persistence.database import Database
 from interchange.persistence.file import FileStorage
 
 
+pd.set_option("future.no_silent_downcasting", True)
+
 log = Logger(__name__)
 fs = FileStorage()
 
@@ -84,6 +86,46 @@ class b2b_program_id(CalculatedField):
                 return self._get_from_ardef(
                     source["account_interval"], "b2b_program_id"
                 )
+            case _:
+                raise NotImplementedError
+
+
+class business_application_id(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                df = source[
+                    [
+                        "business_application_id_fl",
+                        "business_application_id_cr",
+                        "business_application_id_ft",
+                    ]
+                ]
+                df = df.apply(lambda x: x.str.strip())
+                df = df.replace("", np.nan)
+                return df.bfill(axis=1).iloc[:, 0]
+            case _:
+                raise NotImplementedError
+
+
+class business_format_code(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                df = source[
+                    [
+                        "business_format_code_cr",
+                        "business_format_code_fl",
+                        "business_format_code_ft",
+                        "business_format_code_df",
+                        "business_format_code_pd",
+                        "business_format_code_sd",
+                        "business_format_code_sp",
+                    ]
+                ]
+                df = df.apply(lambda x: x.str.strip())
+                df = df.replace("", np.nan)
+                return df.bfill(axis=1).iloc[:, 0]
             case _:
                 raise NotImplementedError
 
@@ -180,11 +222,29 @@ class funding_source(CalculatedField):
                 raise NotImplementedError
 
 
+class issuer_bin_8(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                return source["account_number"].str.slice(0, 8)
+            case _:
+                raise NotImplementedError
+
+
 class issuer_country(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
                 return self._get_from_ardef(source["account_interval"], "country")
+            case _:
+                raise NotImplementedError
+
+
+class issuer_region(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                return self._get_from_ardef(source["account_interval"], "region")
             case _:
                 raise NotImplementedError
 
@@ -361,6 +421,42 @@ class jurisdiction_region(CalculatedField):
                 raise NotImplementedError
 
 
+class message_reason_code(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                df = source[
+                    [
+                        "message_reason_code_df",
+                        "message_reason_code_sd",
+                        "message_reason_code_sp",
+                    ]
+                ]
+                df = df.apply(lambda x: x.str.strip())
+                df = df.replace("", np.nan)
+                return df.bfill(axis=1).iloc[:, 0]
+            case _:
+                raise NotImplementedError
+
+
+class network_identification_code(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                df = source[
+                    [
+                        "network_identification_code_df",
+                        "network_identification_code_sd",
+                        "network_identification_code_sp",
+                    ]
+                ]
+                df = df.apply(lambda x: x.str.strip())
+                df = df.replace("", np.nan)
+                return df.bfill(axis=1).iloc[:, 0]
+            case _:
+                raise NotImplementedError
+
+
 class nnss_indicator(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
@@ -405,6 +501,33 @@ class reversal_indicator(CalculatedField):
                 raise NotImplementedError
 
 
+class source_currency_code_alphabetic(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        db = Database()
+        country = db.read_records(
+            table_name="currency",
+            fields=["currency_numeric_code", "currency_alphabetic_code"],
+        )
+        country.rename(
+            columns={
+                "currency_numeric_code": "source_currency_code",
+                "currency_alphabetic_code": "source_currency_code_alphabetic",
+            },
+            inplace=True,
+        )
+        match type_record:
+            case "draft":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    on="source_currency_code",
+                )
+                return source["source_currency_code_alphabetic"]
+            case _:
+                raise NotImplementedError
+
+
 class technology_indicator(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
@@ -434,6 +557,23 @@ class travel_indicator(CalculatedField):
                 return self._get_from_ardef(
                     source["account_interval"], "travel_indicator"
                 )
+            case _:
+                raise NotImplementedError
+
+
+class type_of_purchase(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                df = source[
+                    [
+                        "type_of_purchase_fl",
+                        "type_of_purchase_ft",
+                    ]
+                ]
+                df = df.apply(lambda x: x.str.strip())
+                df = df.replace("", np.nan)
+                return df.bfill(axis=1).iloc[:, 0]
             case _:
                 raise NotImplementedError
 
@@ -500,6 +640,7 @@ def _get_visa_ardef(file_date: date) -> pd.DataFrame:
             "nnss_indicator",
             "product_id",
             "product_subtype",
+            "region",
             "technology_indicator",
             "travel_indicator",
         ],
@@ -575,22 +716,30 @@ def calculate_baseii_fields(
         ardef_country,
         authorization_code_valid,
         b2b_program_id,
+        business_application_id,
+        business_format_code,
         business_mode,
         business_transaction_type,
         fast_funds,
         funding_source,
+        issuer_bin_8,
         issuer_country,
-        jurisdiction,
+        issuer_region,
         jurisdiction_assigned,
         jurisdiction_country,
         jurisdiction_region,
+        jurisdiction,
+        message_reason_code,
+        network_identification_code,
         nnss_indicator,
         product_id,
         product_subtype,
         reversal_indicator,
+        source_currency_code_alphabetic,
         technology_indicator,
         timeliness,
         travel_indicator,
+        type_of_purchase,
     ]
     fields = []
     for field in BASEII_FIELDS:
