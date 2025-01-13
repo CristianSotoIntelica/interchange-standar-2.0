@@ -1,6 +1,5 @@
 from datetime import date
 
-import numpy as np
 import pandas as pd
 
 from interchange.logs.logger import Logger
@@ -155,6 +154,74 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             raise NotImplementedError
 
 
+def _evaluate_interchange_fees(
+    transactions: pd.DataFrame, rules: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Evaluate interchange fee criteria for a dataset of transactions.
+    """
+    # Filter rule definitions to only jurisdictions present in data.
+    jurisdiction_list = transactions["jurisdiction_assigned"].unique()
+    rules_to_evaluate = rules[rules["region_country_code"].isin(jurisdiction_list)]
+    # Initialize rule identifier fields.
+    transactions["interchange_region_country_code"] = ""
+    transactions["interchange_intelica_id"] = -1
+    transactions["interchange_fee_descriptor"] = ""
+    transactions["interchange_fee_currency"] = ""
+    transactions["interchange_fee_variable"] = 0.0
+    transactions["interchange_fee_fixed"] = 0.0
+    transactions["interchange_fee_min"] = 0.0
+    transactions["interchange_fee_cap"] = 0.0
+    # Iterate through each rule definition.
+    conditions_to_skip = [
+        "region_country_code",
+        "valid_from",
+        "valid_until",
+        "intelica_id",
+        "fee_descriptor",
+        "fee_currency",
+        "fee_variable",
+        "fee_fixed",
+        "fee_min",
+        "fee_cap",
+        "source_currency_code",
+    ]
+    update_columns = [
+        "region_country_code",
+        "intelica_id",
+        "fee_descriptor",
+        "fee_currency",
+        "fee_variable",
+        "fee_fixed",
+        "fee_min",
+        "fee_cap",
+    ]
+    conditions = [c for c in rules_to_evaluate.columns if c not in conditions_to_skip]
+    for _, rule in rules_to_evaluate.iterrows():
+        # Step 1: Filter unprocessed transactions and decide to break, skip or evaluate.
+        next_batch = transactions[transactions["interchange_intelica_id"] == -1]
+        if next_batch.empty:
+            break
+        next_batch = next_batch[
+            next_batch["jurisdiction_assigned"] == rule["region_country_code"]
+        ]
+        if next_batch.empty:
+            continue
+        # Step 2: Iterate through each condition in the rule and apply its condition.
+        for condition in conditions:
+            pass
+            # next_batch = apply_condition(next_batch, condition, rule[condition])
+        # Step 3: Update transaction table with batch results.
+        for column in update_columns:
+            next_batch.loc[:, f"interchange_{column}"] = rule[column]
+
+        transactions.update(next_batch[[f"interchange_{c}" for c in update_columns]])
+
+    columns_to_return = [f"interchange_{c}" for c in update_columns]
+    columns_to_return = ["source_currency_code", "source_amount"] + columns_to_return
+    return transactions[columns_to_return]
+
+
 def calculate_baseii_interchange(
     origin_layer: FileStorage.Layer,
     target_layer: FileStorage.Layer,
@@ -186,20 +253,41 @@ def calculate_baseii_interchange(
     log.logger.info(
         f"Merging transactional and calculated data from {client_id} file {file_id}"
     )
-    data = transactions.join(calculated, how="left", lsuffix="_baseii")
+    merged_data = transactions.join(calculated, how="left", lsuffix="_baseii")
 
-    # TEMPORARY:
     log.logger.info(f"Reading visa rule definitions for {client_id} file {file_id}")
     file_data = _get_file_data(client_id, file_id)
     rules_data = _get_visa_rule_definitions(
         file_data["file_processing_date"], type_record="draft"
     )
 
+    log.logger.info(f"Evaluating rule definitions for {client_id} file {file_id}")
+    interchange_criteria = _evaluate_interchange_fees(merged_data, rules_data)
+
+    log.logger.info(f"Evaluating rule definitions for {client_id} file {file_id}")
+    interchange_df = interchange_criteria
+
+    log.logger.info(f"Saving Visa interchange fields for {client_id} file {file_id}")
+    fs.write_parquet(
+        interchange_df, target_layer, client_id, file_id, subdir=target_subdir
+    )
+
+    # column_group_space = [
+    #     "nnss_indicator",
+    #     "cardholder_id_method",
+    #     "moto_ec_indicator",
+    #     "acceptance_terminal_indicator",
+    #     "merchant_vat_registration_number",
+    # ]
+    # column_group_amount_currency = ["source_amount"]
+    # column_group_greater_less = ["surcharge_amount", "timeliness"]
+    # column_group_number_between = ["merchant_category_code", "issuer_bin_8"]
+
 
 def calculate_sms_interchange() -> None:
     raise NotImplementedError
 
 
-# calculate_baseii_interchange(
-#     fs.Layer.STAGING, fs.Layer.STAGING, "DEMO", "CDA26F0BEB4349D03346A721DDCF0DC7"
-# )
+calculate_baseii_interchange(
+    fs.Layer.STAGING, fs.Layer.STAGING, "DEMO", "CDA26F0BEB4349D03346A721DDCF0DC7"
+)
