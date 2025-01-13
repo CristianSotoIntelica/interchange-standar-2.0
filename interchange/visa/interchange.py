@@ -154,6 +154,75 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             raise NotImplementedError
 
 
+def _apply_condition_default(
+    condition: str, rule: pd.Series, batch: pd.DataFrame
+) -> pd.DataFrame:
+    return batch
+
+
+def _apply_condition_space(
+    condition: str, rule: pd.Series, batch: pd.DataFrame
+) -> pd.DataFrame:
+    return batch
+
+
+def _apply_condition_greater_less(
+    condition: str, rule: pd.Series, batch: pd.DataFrame
+) -> pd.DataFrame:
+    return batch
+
+
+def _apply_condition_number_between(
+    condition: str, rule: pd.Series, batch: pd.DataFrame
+) -> pd.DataFrame:
+    return batch
+
+
+def _apply_condition_amount_currency(
+    condition: str, rule: pd.Series, batch: pd.DataFrame
+) -> pd.DataFrame:
+    return batch
+
+
+def _apply_condition(
+    condition: str, rule: pd.Series, batch: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Check what type of condition to apply to a batch and apply the condition.
+    """
+    column_group_space = [
+        "nnss_indicator",
+        "cardholder_id_method",
+        "moto_ec_indicator",
+        "acceptance_terminal_indicator",
+        "merchant_vat_registration_number",
+    ]
+    column_group_greater_less = [
+        "surcharge_amount",
+        "timeliness",
+    ]
+    column_group_number_between = [
+        "merchant_category_code",
+        "issuer_bin_8",
+    ]
+    column_group_amount_currency = [
+        "source_amount",
+    ]
+    match condition:
+        case col if col in column_group_space:
+            result = _apply_condition_space(condition, rule, batch)
+        case col if col in column_group_greater_less:
+            result = _apply_condition_greater_less(condition, rule, batch)
+        case col if col in column_group_number_between:
+            result = _apply_condition_number_between(condition, rule, batch)
+        case col if col in column_group_amount_currency:
+            result = _apply_condition_amount_currency(condition, rule, batch)
+        case _:
+            result = _apply_condition_default(condition, rule, batch)
+
+    return result
+
+
 def _evaluate_interchange_fees(
     transactions: pd.DataFrame, rules: pd.DataFrame
 ) -> pd.DataFrame:
@@ -209,12 +278,10 @@ def _evaluate_interchange_fees(
             continue
         # Step 2: Iterate through each condition in the rule and apply its condition.
         for condition in conditions:
-            pass
-            # next_batch = apply_condition(next_batch, condition, rule[condition])
+            next_batch = _apply_condition(condition, rule, next_batch)
         # Step 3: Update transaction table with batch results.
         for column in update_columns:
             next_batch.loc[:, f"interchange_{column}"] = rule[column]
-
         transactions.update(next_batch[[f"interchange_{c}" for c in update_columns]])
 
     columns_to_return = [f"interchange_{c}" for c in update_columns]
@@ -271,17 +338,6 @@ def calculate_baseii_interchange(
     fs.write_parquet(
         interchange_df, target_layer, client_id, file_id, subdir=target_subdir
     )
-
-    # column_group_space = [
-    #     "nnss_indicator",
-    #     "cardholder_id_method",
-    #     "moto_ec_indicator",
-    #     "acceptance_terminal_indicator",
-    #     "merchant_vat_registration_number",
-    # ]
-    # column_group_amount_currency = ["source_amount"]
-    # column_group_greater_less = ["surcharge_amount", "timeliness"]
-    # column_group_number_between = ["merchant_category_code", "issuer_bin_8"]
 
 
 def calculate_sms_interchange() -> None:
