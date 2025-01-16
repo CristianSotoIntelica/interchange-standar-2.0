@@ -155,70 +155,82 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
 
 
 def _apply_condition_default(
-    condition: str, rule: pd.Series, batch: pd.DataFrame
+    condition_name: str, condition_value: str, batch: pd.DataFrame
 ) -> pd.DataFrame:
-    return batch
+    """
+    Checks conditions that have a specific value.
+    """
+    condition_value = condition_value.replace("SPACE", " ").replace("BLANK", "")
+    value_list = condition_value.split(",")
+    valid_values = []
+    not_valid_values = []
+    for value in value_list:
+        not_keyword_flag = False
+        if "NOT:" in value:
+            value = value.replace("NOT:", "")
+            not_keyword_flag = True
+        filled_range = []
+        if "-" in value:
+            split_values = value.split("-", maxsplit=1)
+            filled_range = list(range(int(split_values[0]), int(split_values[1]) + 1))
+            filled_range = list(map(str, filled_range))
+        reformatted_values = filled_range or [value]
+        match not_keyword_flag:
+            case False:
+                valid_values.extend(reformatted_values)
+            case True:
+                not_valid_values.extend(reformatted_values)
 
+    filter = batch
+    if valid_values:
+        filter = filter[filter[condition_name].astype(str).isin(valid_values)]
+    if not_valid_values:
+        filter = filter[~filter[condition_name].astype(str).isin(not_valid_values)]
 
-def _apply_condition_space(
-    condition: str, rule: pd.Series, batch: pd.DataFrame
-) -> pd.DataFrame:
-    return batch
+    return filter
 
 
 def _apply_condition_greater_less(
-    condition: str, rule: pd.Series, batch: pd.DataFrame
-) -> pd.DataFrame:
-    return batch
-
-
-def _apply_condition_number_between(
-    condition: str, rule: pd.Series, batch: pd.DataFrame
+    condition_name: str, condition_value: str, batch: pd.DataFrame
 ) -> pd.DataFrame:
     return batch
 
 
 def _apply_condition_amount_currency(
-    condition: str, rule: pd.Series, batch: pd.DataFrame
+    condition_name: str, condition_value: str, batch: pd.DataFrame
 ) -> pd.DataFrame:
     return batch
 
 
 def _apply_condition(
-    condition: str, rule: pd.Series, batch: pd.DataFrame
+    condition_name: str, condition_value: str, batch: pd.DataFrame
 ) -> pd.DataFrame:
     """
-    Check what type of condition to apply to a batch and apply the condition.
+    Clean, check and apply condition to a batch of transactions.
     """
-    column_group_space = [
-        "nnss_indicator",
-        "cardholder_id_method",
-        "moto_ec_indicator",
-        "acceptance_terminal_indicator",
-        "merchant_vat_registration_number",
-    ]
+    # If there is no condition, return the same batch of transactions.
+    condition_value = condition_value.replace(" ", "").upper()
+    if condition_value in ("", "NAN", "NONE"):
+        return batch
+    # Otherwise, evaluate the condition.
     column_group_greater_less = [
         "surcharge_amount",
         "timeliness",
     ]
-    column_group_number_between = [
-        "merchant_category_code",
-        "issuer_bin_8",
-    ]
     column_group_amount_currency = [
         "source_amount",
     ]
-    match condition:
-        case col if col in column_group_space:
-            result = _apply_condition_space(condition, rule, batch)
-        case col if col in column_group_greater_less:
-            result = _apply_condition_greater_less(condition, rule, batch)
-        case col if col in column_group_number_between:
-            result = _apply_condition_number_between(condition, rule, batch)
-        case col if col in column_group_amount_currency:
-            result = _apply_condition_amount_currency(condition, rule, batch)
+    match condition_name:
+        case name if name in column_group_greater_less:
+            result = _apply_condition_greater_less(
+                condition_name, condition_value, batch
+            )
+        case name if name in column_group_amount_currency:
+            result = _apply_condition_amount_currency(
+                condition_name, condition_value, batch
+            )
         case _:
-            result = _apply_condition_default(condition, rule, batch)
+            result = _apply_condition_default(condition_name, condition_value, batch)
 
     return result
 
@@ -265,24 +277,31 @@ def _evaluate_interchange_fees(
         "fee_min",
         "fee_cap",
     ]
-    conditions = [c for c in rules_to_evaluate.columns if c not in conditions_to_skip]
     for _, rule in rules_to_evaluate.iterrows():
         # Step 1: Filter unprocessed transactions and decide to break, skip or evaluate.
-        next_batch = transactions[transactions["interchange_intelica_id"] == -1]
-        if next_batch.empty:
-            break
-        next_batch = next_batch[
-            next_batch["jurisdiction_assigned"] == rule["region_country_code"]
+        next_batch = transactions[
+            (transactions["interchange_intelica_id"] == -1)
+            & (transactions["jurisdiction_assigned"] == rule["region_country_code"])
         ]
         if next_batch.empty:
             continue
         # Step 2: Iterate through each condition in the rule and apply its condition.
+        conditions = [
+            str(cond_name)
+            for cond_name in rule.index.to_list()
+            if cond_name not in conditions_to_skip and rule[cond_name] != ""
+        ]
         for condition in conditions:
-            next_batch = _apply_condition(condition, rule, next_batch)
+            next_batch = _apply_condition(condition, rule[condition], next_batch)
+            if next_batch.empty:
+                break
         # Step 3: Update transaction table with batch results.
-        for column in update_columns:
-            next_batch.loc[:, f"interchange_{column}"] = rule[column]
-        transactions.update(next_batch[[f"interchange_{c}" for c in update_columns]])
+        if not next_batch.empty:
+            for column in update_columns:
+                next_batch.loc[:, f"interchange_{column}"] = rule[column]
+            transactions.update(
+                next_batch[[f"interchange_{c}" for c in update_columns]]
+            )
 
     columns_to_return = [f"interchange_{c}" for c in update_columns]
     columns_to_return = ["source_currency_code", "source_amount"] + columns_to_return
@@ -328,10 +347,10 @@ def calculate_baseii_interchange(
         file_data["file_processing_date"], type_record="draft"
     )
 
-    log.logger.info(f"Evaluating rule definitions for {client_id} file {file_id}")
+    log.logger.info(f"Evaluating fee criteria for {client_id} file {file_id}")
     interchange_criteria = _evaluate_interchange_fees(merged_data, rules_data)
 
-    log.logger.info(f"Evaluating rule definitions for {client_id} file {file_id}")
+    log.logger.info(f"Calculating fee amounts for {client_id} file {file_id}")
     interchange_df = interchange_criteria
 
     log.logger.info(f"Saving Visa interchange fields for {client_id} file {file_id}")
