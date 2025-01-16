@@ -193,7 +193,35 @@ def _apply_condition_default(
 def _apply_condition_greater_less(
     condition_name: str, condition_value: str, batch: pd.DataFrame
 ) -> pd.DataFrame:
-    return batch
+    """
+    Check numeric conditions where a value falls in a specified range.
+    """
+    if any(x in condition_value for x in ["<", ">", "="]):
+        query_condition = f"{condition_name} {
+            condition_value.replace('<=', '<= ')
+            .replace('>=', '>= ')
+            .replace('>', '> ')
+            .replace('<', '< ')
+        }"
+        filter = batch.query(query_condition)
+    elif any(x in condition_value for x in ["BETWEEN", "AND"]):
+        range_values = list(
+            map(
+                float,
+                condition_value.replace(" ", "")
+                .replace("BETWEEN", "")
+                .split("AND", maxsplit=1),
+            )
+        )
+        filter = batch[
+            batch[condition_name]
+            .astype(float)
+            .between(range_values[0], range_values[1], inclusive="both")
+        ]
+    else:
+        raise ValueError
+
+    return filter
 
 
 def _apply_condition_amount_currency(
