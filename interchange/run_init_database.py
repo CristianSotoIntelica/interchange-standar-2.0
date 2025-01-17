@@ -236,3 +236,17 @@ if __name__ == "__main__":
             "other_criteria_applies": "TEXT",
         },
     )
+
+    log.logger.info("Creating 'exchange_rate' table")
+    db.create_table(
+        table_name="exchange_rate",
+        fields_def={
+            "brand": "TEXT",
+            "rate_date": "DATE",
+            "currency_from": "TEXT",
+            "currency_to": "TEXT",
+            "currency_from_code": "TEXT",
+            "currency_to_code": "TEXT",
+            "exchange_value": "NUMERIC",
+        },
+    )
