@@ -154,6 +154,32 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             raise NotImplementedError
 
 
+def _get_exchange_rates(file_date: date, type_record: str) -> pd.DataFrame:
+    """
+    Get the exchange rates valid for the file's processing date and brand.
+    """
+    match type_record:
+        case "draft":
+            brand = "VISA"
+        case _:
+            raise NotImplementedError
+    date_string = file_date.strftime("%Y-%m-%d")
+    db = Database()
+    df = db.read_records(
+        table_name="exchange_rate",
+        fields=[
+            "currency_from",
+            "currency_to",
+            "currency_from_code",
+            "currency_to_code",
+            "exchange_value",
+        ],
+        where={"brand": brand, "rate_date": date_string},
+    )
+    df["exchange_value"] = df["exchange_value"].apply(pd.to_numeric, errors="coerce")
+    return df
+
+
 def _apply_condition_default(
     condition_name: str, condition_value: str, batch: pd.DataFrame
 ) -> pd.DataFrame:
@@ -225,13 +251,16 @@ def _apply_condition_greater_less(
 
 
 def _apply_condition_amount_currency(
-    condition_name: str, condition_value: str, batch: pd.DataFrame
+    condition_name: str, condition_value: str, batch: pd.DataFrame, rates: pd.DataFrame
 ) -> pd.DataFrame:
+    currency_fields = {
+        "source_amount": "source_currency_code",
+    }
     return batch
 
 
 def _apply_condition(
-    condition_name: str, condition_value: str, batch: pd.DataFrame
+    condition_name: str, condition_value: str, batch: pd.DataFrame, rates: pd.DataFrame
 ) -> pd.DataFrame:
     """
     Clean, check and apply condition to a batch of transactions.
@@ -255,7 +284,7 @@ def _apply_condition(
             )
         case name if name in column_group_amount_currency:
             result = _apply_condition_amount_currency(
-                condition_name, condition_value, batch
+                condition_name, condition_value, batch, rates
             )
         case _:
             result = _apply_condition_default(condition_name, condition_value, batch)
@@ -264,7 +293,7 @@ def _apply_condition(
 
 
 def _evaluate_interchange_fees(
-    transactions: pd.DataFrame, rules: pd.DataFrame
+    transactions: pd.DataFrame, rules: pd.DataFrame, rates: pd.DataFrame
 ) -> pd.DataFrame:
     """
     Evaluate interchange fee criteria for a dataset of transactions.
@@ -320,7 +349,7 @@ def _evaluate_interchange_fees(
             if cond_name not in conditions_to_skip and rule[cond_name] != ""
         ]
         for condition in conditions:
-            next_batch = _apply_condition(condition, rule[condition], next_batch)
+            next_batch = _apply_condition(condition, rule[condition], next_batch, rates)
             if next_batch.empty:
                 break
         # Step 3: Update transaction table with batch results.
@@ -375,8 +404,11 @@ def calculate_baseii_interchange(
         file_data["file_processing_date"], type_record="draft"
     )
 
+    log.logger.info(f"Reading exchange rate data for {client_id} file {file_id}")
+    rates = _get_exchange_rates(file_data["file_processing_date"], type_record="draft")
+
     log.logger.info(f"Evaluating fee criteria for {client_id} file {file_id}")
-    interchange_criteria = _evaluate_interchange_fees(merged_data, rules_data)
+    interchange_criteria = _evaluate_interchange_fees(merged_data, rules_data, rates)
 
     log.logger.info(f"Calculating fee amounts for {client_id} file {file_id}")
     interchange_df = interchange_criteria
