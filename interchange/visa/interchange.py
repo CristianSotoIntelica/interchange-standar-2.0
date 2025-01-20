@@ -256,6 +256,8 @@ def _apply_condition_amount_currency(
     currency_fields = {
         "source_amount": "source_currency_code",
     }
+    pass
+
     return batch
 
 
