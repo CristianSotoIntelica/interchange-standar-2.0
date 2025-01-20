@@ -65,7 +65,6 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             "issuer_bin_8",
             "acquirer_bin",
             "acquirer_business_id",
-            "transaction_amount_currency",
             "transaction_amount",
             "acquirer_country",
             "acquirer_region",
@@ -141,7 +140,6 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                     "pos_terminal_capability": "pos_terminal_capacity",
                     "special_condition_indicator": "special_condition_indicator_merchant_draft_indicator",
                     "summary_commodity": "summary_commodity_code",
-                    "transaction_amount_currency": "source_currency_code",
                     "transaction_amount": "source_amount",
                     "transaction_code_qualifier": "draft_code_qualifier_0",
                     "transaction_code": "draft_code",
@@ -197,8 +195,8 @@ def _apply_condition_default(
             not_keyword_flag = True
         filled_range = []
         if "-" in value:
-            split_values = value.split("-", maxsplit=1)
-            filled_range = list(range(int(split_values[0]), int(split_values[1]) + 1))
+            range_low, range_high = value.split("-", maxsplit=1)
+            filled_range = list(range(int(range_low), int(range_high) + 1))
             filled_range = list(map(str, filled_range))
         reformatted_values = filled_range or [value]
         match not_keyword_flag:
@@ -231,7 +229,7 @@ def _apply_condition_greater_less(
         }"
         filter = batch.query(query_condition)
     elif any(x in condition_value for x in ["BETWEEN", "AND"]):
-        range_values = list(
+        range_low, range_high = list(
             map(
                 float,
                 condition_value.replace(" ", "")
@@ -242,7 +240,7 @@ def _apply_condition_greater_less(
         filter = batch[
             batch[condition_name]
             .astype(float)
-            .between(range_values[0], range_values[1], inclusive="both")
+            .between(range_low, range_high, inclusive="both")
         ]
     else:
         raise ValueError
@@ -251,14 +249,49 @@ def _apply_condition_greater_less(
 
 
 def _apply_condition_amount_currency(
-    condition_name: str, condition_value: str, batch: pd.DataFrame, rates: pd.DataFrame
+    condition_name: str, string_range: str, batch: pd.DataFrame, rates: pd.DataFrame
 ) -> pd.DataFrame:
-    currency_fields = {
+    """
+    Check currency amount conditions where a value falls in a specified range.
+    """
+    condition_target_fields = {
         "source_amount": "source_currency_code",
     }
-    pass
+    target_currency, string_range = string_range.split(",", maxsplit=1)
+    target_rates = rates[rates["currency_to"] == target_currency]
+    filter = pd.merge(
+        left=batch,
+        right=target_rates[["currency_from_code", "exchange_value"]],
+        how="left",
+        left_on=condition_target_fields[condition_name],
+        right_on="currency_from_code",
+    )
+    filter["comparison_value"] = filter[condition_name] * filter["exchange_value"]
 
-    return batch
+    if any(x in string_range for x in ["<", ">", "="]):
+        query_condition = f"comparison_value {
+            string_range.replace('<=', '<= ')
+            .replace('>=', '>= ')
+            .replace('>', '> ')
+            .replace('<', '< ')
+        }"
+        filter = filter.query(query_condition)
+    elif any(x in string_range for x in ["BETWEEN", "AND"]):
+        range_low, range_high = list(
+            map(
+                float,
+                string_range.replace(" ", "")
+                .replace("BETWEEN", "")
+                .split("AND", maxsplit=1),
+            )
+        )
+        filter = filter[
+            filter["comparison_value"].between(range_low, range_high, inclusive="both")
+        ]
+    else:
+        raise ValueError
+
+    return filter
 
 
 def _apply_condition(
