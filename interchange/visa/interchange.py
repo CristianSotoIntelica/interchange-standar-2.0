@@ -1,5 +1,6 @@
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
 from interchange.logs.logger import Logger
@@ -255,17 +256,21 @@ def _apply_condition_amount_currency(
     Check currency amount conditions where a value falls in a specified range.
     """
     condition_target_fields = {
-        "source_amount": "source_currency_code",
+        "source_amount": "source_currency_code_alphabetic",
     }
     target_currency, string_range = string_range.split(",", maxsplit=1)
     target_rates = rates[rates["currency_to"] == target_currency]
     filter = pd.merge(
         left=batch,
-        right=target_rates[["currency_from_code", "exchange_value"]],
+        right=target_rates[["currency_from", "exchange_value"]],
         how="left",
         left_on=condition_target_fields[condition_name],
-        right_on="currency_from_code",
+        right_on="currency_from",
     )
+    filter.loc[
+        filter[condition_target_fields[condition_name]] == target_currency,
+        "exchange_value",
+    ] = 1
     filter["comparison_value"] = filter[condition_name] * filter["exchange_value"]
 
     if any(x in string_range for x in ["<", ">", "="]):
@@ -357,7 +362,6 @@ def _evaluate_interchange_fees(
         "fee_fixed",
         "fee_min",
         "fee_cap",
-        "source_currency_code",
     ]
     update_columns = [
         "region_country_code",
@@ -396,8 +400,55 @@ def _evaluate_interchange_fees(
             )
 
     columns_to_return = [f"interchange_{c}" for c in update_columns]
-    columns_to_return = ["source_currency_code", "source_amount"] + columns_to_return
+    columns_to_return = [
+        "source_currency_code_alphabetic",
+        "source_amount",
+    ] + columns_to_return
     return transactions[columns_to_return]
+
+
+def _calculate_interchange_fees(
+    fee_parameters: pd.DataFrame, rates: pd.DataFrame
+) -> pd.DataFrame:
+    stage = pd.merge(
+        left=fee_parameters,
+        right=rates[["currency_from", "currency_to", "exchange_value"]],
+        how="left",
+        left_on=["source_currency_code_alphabetic", "interchange_fee_currency"],
+        right_on=["currency_from", "currency_to"],
+    )
+    stage.loc[
+        stage["source_currency_code_alphabetic"] == stage["interchange_fee_currency"],
+        "exchange_value",
+    ] = 1
+    stage.drop(columns=["currency_from", "currency_to"], inplace=True)
+
+    stage["interchange_fee_variable"] = stage["interchange_fee_variable"].fillna(0)
+    cur_cols = ["interchange_fee_fixed", "interchange_fee_min", "interchange_fee_cap"]
+    stage[cur_cols] = stage[cur_cols].replace(to_replace=0, value=np.nan)
+    for col in cur_cols:
+        stage[f"{col}_source"] = stage[col] * stage["exchange_value"]
+        match col:
+            case "interchange_fee_fixed":
+                stage[f"{col}_source"] = stage[f"{col}_source"].fillna(0)
+            case "interchange_fee_min":
+                stage[f"{col}_source"] = stage[f"{col}_source"].fillna(-np.inf)
+            case "interchange_fee_cap":
+                stage[f"{col}_source"] = stage[f"{col}_source"].fillna(+np.inf)
+
+    stage["interchange_fee_amount"] = (
+        stage["source_amount"] * stage["interchange_fee_variable"]
+        + stage["interchange_fee_fixed_source"]
+    )
+    stage["interchange_fee_amount"] = stage[
+        ["interchange_fee_amount", "interchange_fee_min_source"]
+    ].max(axis=1)
+    stage["interchange_fee_amount"] = stage[
+        ["interchange_fee_amount", "interchange_fee_cap_source"]
+    ].min(axis=1)
+
+    result = stage.drop(columns=["source_currency_code_alphabetic", "source_amount"])
+    return result
 
 
 def calculate_baseii_interchange(
@@ -443,10 +494,10 @@ def calculate_baseii_interchange(
     rates = _get_exchange_rates(file_data["file_processing_date"], type_record="draft")
 
     log.logger.info(f"Evaluating fee criteria for {client_id} file {file_id}")
-    interchange_criteria = _evaluate_interchange_fees(merged_data, rules_data, rates)
+    fee_parameters = _evaluate_interchange_fees(merged_data, rules_data, rates)
 
     log.logger.info(f"Calculating fee amounts for {client_id} file {file_id}")
-    interchange_df = interchange_criteria
+    interchange_df = _calculate_interchange_fees(fee_parameters, rates)
 
     log.logger.info(f"Saving Visa interchange fields for {client_id} file {file_id}")
     fs.write_parquet(
@@ -456,8 +507,3 @@ def calculate_baseii_interchange(
 
 def calculate_sms_interchange() -> None:
     raise NotImplementedError
-
-
-calculate_baseii_interchange(
-    fs.Layer.STAGING, fs.Layer.STAGING, "DEMO", "CDA26F0BEB4349D03346A721DDCF0DC7"
-)
