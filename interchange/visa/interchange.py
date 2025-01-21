@@ -410,6 +410,9 @@ def _evaluate_interchange_fees(
 def _calculate_interchange_fees(
     fee_parameters: pd.DataFrame, rates: pd.DataFrame
 ) -> pd.DataFrame:
+    """
+    Calculate interchange fee amounts depending on the assigned fee parameters.
+    """
     stage = pd.merge(
         left=fee_parameters,
         right=rates[["currency_from", "currency_to", "exchange_value"]],
