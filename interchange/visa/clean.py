@@ -107,7 +107,7 @@ def _clean_field_values(
             if not float_decimals > 0:
                 raise ValueError
             pre = field_series.str.strip()
-            result = pd.to_numeric(pre, errors="coerce").astype(float) / float_decimals
+            result = pd.to_numeric(pre, errors="coerce") / (10**float_decimals)
         case "date":
             date_format = definition["date_format"]
             if not date_format:

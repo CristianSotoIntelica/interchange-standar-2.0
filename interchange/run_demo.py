@@ -8,7 +8,7 @@ layer = FileStorage.Layer
 if __name__ == "__main__":
     # Step 1: Define parameters for demo execution:
     client_id = "DEMO"
-    file_id = "848AF5025D434EAFB972742542725898"
+    file_id = "CDA26F0BEB4349D03346A721DDCF0DC7"
     # Step 1: Transform BASE II file into parquet of separate transactions:
     transform.transform_baseii_drafts(
         origin_layer=layer.LANDING,
