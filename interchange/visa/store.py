@@ -44,7 +44,7 @@ def store_baseii_file(
     )
     log.logger.info(f"Merging full BASE II data from {client_id} file {file_id}")
     merged_data = transactions.join(calculated, how="left", lsuffix="_baseii")
-    merged_data = merged_data.join(interchange, how="left", rsuffix="_interchange")
+    merged_data = merged_data.join(interchange, how="left", rsuffix="_intelica")
     log.logger.info(f"Saving full BASE II for {client_id} file {file_id}")
     fs.write_parquet(
         merged_data, target_layer, client_id, file_id, subdir=target_subdir
