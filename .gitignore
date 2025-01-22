@@ -1,6 +1,6 @@
 # Daniel:
 persistence/files
-!persistence/files/landing
+!persistence/files/landing/DEMO/*
 persistence/interchange.db
 
 # Byte-compiled / optimized / DLL files

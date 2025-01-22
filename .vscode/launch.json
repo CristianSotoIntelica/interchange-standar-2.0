@@ -15,6 +15,12 @@
             "type": "debugpy",
             "request": "launch",
             "module": "interchange.visa.interchange"
+        },
+        {
+            "name": "interchange.run_demo",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "interchange.run_demo"
         }
     ]
 }

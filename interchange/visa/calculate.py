@@ -226,7 +226,7 @@ class issuer_bin_8(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
-                return source["account_number"].str.slice(0, 8)
+                return source["account_number"].str.replace("*", "0").str.slice(0, 8)
             case _:
                 raise NotImplementedError
 
@@ -288,11 +288,13 @@ class jurisdiction(CalculatedField):
                             (source["collection_only_flag"] == "C")
                             | (
                                 source["account_number"]
+                                .str.replace("*", "0")
                                 .str.slice(0, 6)
                                 .isin(issuing_bins_6)
                             )
                             | (
                                 source["account_number"]
+                                .str.replace("*", "0")
                                 .str.slice(0, 8)
                                 .isin(issuing_bins_8)
                             )
@@ -528,6 +530,22 @@ class source_currency_code_alphabetic(CalculatedField):
                 raise NotImplementedError
 
 
+class surcharge_amount(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "draft":
+                df = source[
+                    [
+                        "surcharge_amount_df",
+                        "surcharge_amount_sd",
+                        "surcharge_amount_sp",
+                    ]
+                ]
+                return df.max(axis=1)
+            case _:
+                raise NotImplementedError
+
+
 class technology_indicator(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
@@ -701,7 +719,7 @@ def calculate_baseii_fields(
     ardef_data = _get_visa_ardef(file_data["file_processing_date"])
     log.logger.info(f"Calculating additional fields from {client_id} file {file_id}")
     data["account_interval"] = pd.cut(
-        data["account_number"].str.slice(0, 9).astype(int),
+        data["account_number"].str.replace("*", "0").str.slice(0, 9).astype(int),
         ardef_data["account_interval"],
         include_lowest=True,
     )
@@ -736,6 +754,7 @@ def calculate_baseii_fields(
         product_subtype,
         reversal_indicator,
         source_currency_code_alphabetic,
+        surcharge_amount,
         technology_indicator,
         timeliness,
         travel_indicator,
