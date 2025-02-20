@@ -19,7 +19,6 @@ class _Layer(StrEnum):
     LANDING = auto()
     STAGING = auto()
     OPERATIONAL = auto()
-    ANALYTICS = auto()
 
 
 class FileStorage:
