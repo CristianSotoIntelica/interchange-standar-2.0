@@ -106,7 +106,7 @@ class Database:
         """
         fields_str = ", ".join(fields)
         fmt_values = [self._format_list(tp) for tp in values]
-        values_str = ", ".join([f"({", ".join(tp)})" for tp in fmt_values])
+        values_str = ", ".join([f"({', '.join(tp)})" for tp in fmt_values])
         sql_statement = f"""
             INSERT INTO {table_name} ({fields_str})
             VALUES {values_str};

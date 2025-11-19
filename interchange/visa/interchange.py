@@ -222,12 +222,14 @@ def _apply_condition_greater_less(
     Check numeric conditions where a value falls in a specified range.
     """
     if any(x in condition_value for x in ["<", ">", "="]):
-        query_condition = f"{condition_name} {
-            condition_value.replace('<=', '<= ')
+        query_condition = (
+            f"{condition_name} "
+            + condition_value.replace('<=', '<= ')
             .replace('>=', '>= ')
             .replace('>', '> ')
             .replace('<', '< ')
-        }"
+        )
+
         filter = batch.query(query_condition)
     elif any(x in condition_value for x in ["BETWEEN", "AND"]):
         range_low, range_high = list(
@@ -274,12 +276,14 @@ def _apply_condition_amount_currency(
     filter["comparison_value"] = filter[condition_name] * filter["exchange_value"]
 
     if any(x in string_range for x in ["<", ">", "="]):
-        query_condition = f"comparison_value {
-            string_range.replace('<=', '<= ')
+        query_condition = (
+            f"comparison_value "
+            + string_range.replace('<=', '<= ')
             .replace('>=', '>= ')
             .replace('>', '> ')
             .replace('<', '< ')
-        }"
+        )
+
         filter = filter.query(query_condition)
     elif any(x in string_range for x in ["BETWEEN", "AND"]):
         range_low, range_high = list(

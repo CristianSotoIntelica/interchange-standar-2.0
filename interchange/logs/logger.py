@@ -27,6 +27,11 @@ class Logger:
         dotenv.load_dotenv()
 
         self.logger = logging.getLogger(name)
+
+        # CAMBIO 1: Evitar duplicar handlers
+        if self.logger.handlers:
+            return
+
         self.logger.setLevel(self._LOG_LEVELS[os.environ["ITX_LOG_LEVEL"]])
 
         format = logging.Formatter(self._DEFAULT_FMT)
@@ -39,6 +44,7 @@ class Logger:
             when="D",
             backupCount=3,
             encoding="utf-8",
+            delay = True
         )
         file_handler.setFormatter(format)
 
