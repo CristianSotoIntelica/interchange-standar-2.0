@@ -92,8 +92,46 @@ def extract_baseii_fields(
     fs.write_parquet(extract_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
-def extract_sms_fields() -> None:
-    raise NotImplementedError
+def extract_sms_fields(
+    origin_layer: FileStorage.Layer,
+    target_layer: FileStorage.Layer,
+    client_id: str,
+    file_id: str,
+    origin_subdir="100-SMS_RAW_MESSAGES",
+    target_subdir="200-SMS_EXT_MESSAGES",
+) -> None:
+    """
+    Extract specific SMS fields from records of raw transaction data.
+    """
+    log.logger.info("Loading Visa SMS field definitions")
+    field_defs = _load_visa_field_definitions(
+        "sms", sort_by=["secondary_identifier", "position"]
+    )
+    field_defs = field_defs[field_defs["secondary_identifier"] != "V22000"]
+    log.logger.info(f"Reading Raw SMS Transactions from {client_id} file {file_id}")
+    data = fs.read_parquet(
+        origin_layer,
+        client_id,
+        file_id,
+        subdir=origin_subdir,
+    )
+    log.logger.info(f"Extracting Visa SMS fields from {client_id} file {file_id}")
+    fields = []
+    for _, fd in field_defs.iterrows():
+        fd["secondary_identifier"] = fd["secondary_identifier"][1:]
+        data_view = data
+
+        field = pd.Series(
+            data_view[fd["secondary_identifier"]].str.slice(
+                start=fd["position"] - 1, stop=fd["position"] + fd["length"] - 1
+            ),
+            name=fd["column_name"],
+        )
+        fields.append(field)
+
+    extract_df = pd.concat(fields, axis=1).fillna("").astype(str)
+    log.logger.info(f"Saving Visa SMS fields from {client_id} file {file_id}")
+    fs.write_parquet(extract_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
 def extract_vss_fields() -> None:
