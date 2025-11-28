@@ -22,6 +22,7 @@ def _load_visa_field_definitions(type_record: str, sort_by: list[str]) -> pd.Dat
             "position",
             "length",
             "column_name",
+            "column_type",
             "secondary_identifier_pos",
             "secondary_identifier_len",
             "secondary_identifier",
@@ -127,6 +128,30 @@ def extract_sms_fields(
             ),
             name=fd["column_name"],
         )
+        if fd["column_type"] == "float":
+            mapping = {
+                "}": "0",
+                "{": "0",
+                "A": "1",
+                "B": "2",
+                "C": "3",
+                "D": "4",
+                "E": "5",
+                "F": "6",
+                "G": "7",
+                "H": "8",
+                "I": "9",
+                "J": "1",
+                "K": "2",
+                "L": "3",
+                "M": "4",
+                "N": "5",
+                "O": "6",
+                "P": "7",
+                "Q": "8",
+                "R": "9",
+            }
+            field = field.replace(mapping, regex=True)
         fields.append(field)
 
     extract_df = pd.concat(fields, axis=1).fillna("").astype(str)

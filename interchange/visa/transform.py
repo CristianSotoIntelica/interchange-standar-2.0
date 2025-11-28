@@ -30,7 +30,7 @@ def _pivot_values_on_key(values: pd.Series, start: int, stop: int, cols: list[st
     """
     values_df = values.to_frame(name="value")
     values_df["key"] = values_df["value"].str.slice(start=start, stop=stop).astype(int)
-    values_df["record"] = (values_df["key"] < values_df["key"].shift(1)).cumsum()
+    values_df["record"] = (values_df["key"] <= values_df["key"].shift(1)).cumsum()
     values_df["key"] = values_df["key"].astype(str)
     return (
         values_df.pivot(index="record", columns="key", values="value")

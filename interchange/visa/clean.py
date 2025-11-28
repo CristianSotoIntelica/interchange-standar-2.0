@@ -155,8 +155,40 @@ def clean_baseii_fields(
     fs.write_parquet(clean_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
-def clean_sms_fields() -> None:
-    raise NotImplementedError
+def clean_sms_fields(
+    origin_layer: FileStorage.Layer,
+    target_layer: FileStorage.Layer,
+    client_id: str,
+    file_id: str,
+    origin_subdir="200-SMS_EXT_MESSAGES",
+    target_subdir="300-SMS_CLN_MESSAGES",
+) -> None:
+    """
+    Clean SMS field values from extracted transaction data.
+    """
+    log.logger.info("Loading Visa SMS Messages field definitions")
+    field_defs = _load_visa_field_definitions("sms", sort_by=[])
+    log.logger.info(f"Retrieving file processing date for {client_id} file {file_id}")
+    file_date = _retrieve_file_date(client_id, file_id)
+    log.logger.info(
+        f"Reading extracted BASE II Transactions from {client_id} file {file_id}"
+    )
+    data = fs.read_parquet(
+        origin_layer,
+        client_id,
+        file_id,
+        subdir=origin_subdir,
+    )
+    log.logger.info(
+        f"Cleaning extracted BASE II Transactions from {client_id} file {file_id}"
+    )
+    fields = []
+    for _, field_series in data.items():
+        clean_field = _clean_field_values(field_series, field_defs, file_date)
+        fields.append(clean_field)
+    clean_df = pd.concat(fields, axis=1)
+    log.logger.info(f"Saving Visa Draft clean fields from {client_id} file {file_id}")
+    fs.write_parquet(clean_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
 def clean_vss_fields() -> None:
