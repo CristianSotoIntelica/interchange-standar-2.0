@@ -5,6 +5,7 @@ persistence/files/operational
 persistence/files/staging
 persistence/files/landing
 persistence/interchange.db
+persistence/backup/interchange.db
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
