@@ -83,6 +83,24 @@ def _parse_dates(date_series: pd.Series, date_format: str, file_date: str) -> pd
                 pre > reference_date
             ] - pd.DateOffset(years=10)  # type: ignore
             result = pre
+        case "!YYYYDDD":  # 🆕 NUEVO CASO PARA TU FORMATO
+            # Maneja formato YYYYDDD (año completo + día juliano)
+            # Ejemplo: "2025309" -> 2025, día 309
+            def parse_yyyy_ddd(date_str):
+                if pd.isna(date_str) or date_str.strip() == "":
+                    return pd.NaT
+                try:
+                    year = int(date_str[:4])
+                    day_of_year = int(date_str[4:])
+                    # Validación básica
+                    if day_of_year < 1 or day_of_year > 366:
+                        return pd.NaT
+                    # Crear fecha desde el día juliano
+                    return datetime(year, 1, 1) + pd.Timedelta(days=day_of_year - 1)
+                except (ValueError, IndexError):
+                    return pd.NaT
+            
+            result = date_series.apply(parse_yyyy_ddd)
         case _:
             raise NotImplementedError
     return result
@@ -159,5 +177,69 @@ def clean_sms_fields() -> None:
     raise NotImplementedError
 
 
-def clean_vss_fields() -> None:
-    raise NotImplementedError
+def clean_vss_fields(
+    origin_layer: FileStorage.Layer,
+    target_layer: FileStorage.Layer,
+    client_id: str,
+    file_id: str,
+    vss_types: list[str] = None,
+    origin_subdir_template: str = None,
+    target_subdir_template: str = None,
+) -> None:
+    """
+    Clean VSS field values from extracted settlement data.
+    Processes all VSS variants (110, 120, 130, 140) by default.
+    
+    Args:
+        origin_layer: Source storage layer
+        target_layer: Destination storage layer
+        client_id: Client identifier
+        file_id: File identifier
+        vss_types: List of VSS types to process. Default: ["110", "120", "130", "140"]
+        origin_subdir_template: Template for input subdirs (e.g., "200-BASEII_EXT_VSS_{vss_type}").
+                               If None, uses default
+        target_subdir_template: Template for output subdirs (e.g., "300-BASEII_CLN_VSS_{vss_type}").
+                               If None, uses default
+    """
+    if vss_types is None:
+        vss_types = ["110", "120", "130", "140"]
+    
+    # Default templates if not provided
+    if origin_subdir_template is None:
+        origin_subdir_template = "200-BASEII_EXT_VSS_{vss_type}"
+    if target_subdir_template is None:
+        target_subdir_template = "300-BASEII_CLN_VSS_{vss_type}"
+    
+    log.logger.info(f"Retrieving file processing date for {client_id} file {file_id}")
+    file_date = _retrieve_file_date(client_id, file_id)
+    
+    log.logger.info(f"Cleaning fields for VSS variants: {', '.join(vss_types)}")
+    
+    for vss_type in vss_types:
+        try:
+            type_record = f"vss_{vss_type}"
+            origin_subdir = origin_subdir_template.format(vss_type=vss_type)
+            target_subdir = target_subdir_template.format(vss_type=vss_type)
+            
+            log.logger.info(f"Loading Visa {type_record} field definitions")
+            field_defs = _load_visa_field_definitions(type_record, sort_by=[])
+            log.logger.info(f"Reading extracted VSS {vss_type} records from {client_id} file {file_id}")
+            data = fs.read_parquet(
+                origin_layer,
+                client_id,
+                file_id,
+                subdir=origin_subdir,
+            )
+            log.logger.info(f"Cleaning extracted VSS {vss_type} records from {client_id} file {file_id}")
+            fields = []
+            for _, field_series in data.items():
+                clean_field = _clean_field_values(field_series, field_defs, file_date)
+                fields.append(clean_field)
+            clean_df = pd.concat(fields, axis=1)
+            log.logger.info(f"Saving Visa VSS {vss_type} clean fields from {client_id} file {file_id}")
+            fs.write_parquet(clean_df, target_layer, client_id, file_id, subdir=target_subdir)
+            
+        except Exception as e:
+            log.logger.error(f"Error cleaning VSS {vss_type}: {str(e)}")
+            raise
+    log.logger.info("Completed cleaning VSS fields.")
