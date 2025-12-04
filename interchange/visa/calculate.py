@@ -1286,5 +1286,184 @@ def calculate_sms_fields(
     )
 
 
-def calculate_vss_fields() -> None:
-    raise NotImplementedError
+class VSSCalculatedField:
+    """
+    Base class for VSS calculated fields.
+    Unlike BASEII fields, VSS fields don't need ardef_data.
+    They need client_data and file_data for business logic.
+    """
+
+    def __init__(
+        self, client_data: pd.Series, file_data: pd.Series, vss_type: str
+    ) -> None:
+        self.client = client_data
+        self.file = file_data
+        self.vss_type = vss_type
+
+    def calculate(self, source: pd.DataFrame) -> pd.Series:
+        """
+        This method will always get called to calculate a new field.
+        """
+        raise NotImplementedError
+
+
+class vss_report_type(VSSCalculatedField):
+    """
+    Report type identifier - simply the VSS type as integer.
+    """
+
+    def calculate(self, source: pd.DataFrame) -> pd.Series:
+        return pd.Series(int(self.vss_type), index=source.index, dtype="int64")
+
+
+class vss_aggregation_level(VSSCalculatedField):
+    """
+    Aggregation level based on rollup hierarchy.
+    
+    Logic:
+    - Level 10: Top level (rollup_to == reporting_for)
+    - Level 1-3: Intermediate levels (reporting to rollup groups)
+    - Level 0: Base level (default)
+    """
+
+    def calculate(self, source: pd.DataFrame) -> pd.Series:
+        rollup_to_col = f"rollup_to_sre_identifier_{self.vss_type}"
+        reporting_for_col = f"reporting_for_sre_identifier_{self.vss_type}"
+
+        # Check if required columns exist
+        if (
+            rollup_to_col not in source.columns
+            or reporting_for_col not in source.columns
+        ):
+            log.logger.warning(
+                f"Missing rollup columns for VSS {self.vss_type}. "
+                f"Expected: {rollup_to_col}, {reporting_for_col}. "
+                f"Setting aggregation_level to 0 for all records."
+            )
+            return pd.Series(0, index=source.index, dtype="int64")
+
+        # Initialize aggregation_level with default value 0
+        aggregation_level = pd.Series(0, index=source.index, dtype="int64")
+
+        # Level 10: Top level (rollup_to == reporting_for)
+        top_level_mask = source[rollup_to_col] == source[reporting_for_col]
+        aggregation_level[top_level_mask] = 10
+
+        # Identify rollup groups (intermediate nodes where rollup_to != reporting_for)
+        rollup_groups = source.loc[
+            source[rollup_to_col] != source[reporting_for_col], rollup_to_col
+        ].unique()
+
+        # Convert to set for faster lookup
+        rollup_groups_set = set(rollup_groups)
+
+        # Calculate intermediate levels (1, 2, 3) recursively
+        current_reporting = source[reporting_for_col].copy()
+
+        for level in [1, 2, 3]:
+            # Find records that report to a rollup group
+            reports_to_rollup = current_reporting.isin(rollup_groups_set)
+
+            # Only update records that haven't been assigned a level yet (still 0)
+            # and are not top level (not 10)
+            mask = (aggregation_level == 0) & reports_to_rollup & (~top_level_mask)
+            aggregation_level[mask] = level
+
+            # For next iteration, move up the hierarchy
+            # Map current reporting_for to the next level's rollup_to
+            current_reporting = source.loc[
+                source[reporting_for_col].isin(rollup_groups_set), rollup_to_col
+            ].reindex(source.index, fill_value="")
+
+        return aggregation_level
+
+
+def calculate_vss_fields(
+    origin_layer: FileStorage.Layer,
+    target_layer: FileStorage.Layer,
+    client_id: str,
+    file_id: str,
+    vss_types: list[str] = None,
+    origin_subdir_template: str = None,
+    target_subdir_template: str = None,
+) -> None:
+    """
+    Calculate additional fields from clean VSS settlement data.
+    Processes all VSS variants (110, 120, 130, 140) by default.
+
+    Args:
+        origin_layer: Source storage layer
+        target_layer: Destination storage layer
+        client_id: Client identifier
+        file_id: File identifier
+        vss_types: List of VSS types to process. Default: ["110", "120", "130", "140"]
+        origin_subdir_template: Template for input subdirs (e.g., "300-BASEII_CLN_VSS_{vss_type}").
+                               If None, uses default
+        target_subdir_template: Template for output subdirs (e.g., "400-BASEII_CAL_VSS_{vss_type}").
+                               If None, uses default
+    """
+    if vss_types is None:
+        vss_types = ["110", "120", "130", "140"]
+
+    # Default templates if not provided
+    if origin_subdir_template is None:
+        origin_subdir_template = "300-BASEII_CLN_VSS_{vss_type}"
+    if target_subdir_template is None:
+        target_subdir_template = "400-BASEII_CAL_VSS_{vss_type}"
+
+    # Get client and file metadata (same as BASEII)
+    log.logger.info(f"Reading additional metadata for {client_id} file {file_id}")
+    client_data = _get_client_data(client_id)
+    file_data = _get_file_data(client_id, file_id)
+
+    log.logger.info(f"Calculating fields for VSS variants: {', '.join(vss_types)}")
+
+    for vss_type in vss_types:
+        try:
+            origin_subdir = origin_subdir_template.format(vss_type=vss_type)
+            target_subdir = target_subdir_template.format(vss_type=vss_type)
+
+            log.logger.info(
+                f"Reading clean VSS {vss_type} records from {client_id} file {file_id}"
+            )
+            data = fs.read_parquet(
+                origin_layer,
+                client_id,
+                file_id,
+                subdir=origin_subdir,
+            )
+
+            log.logger.info(
+                f"Calculating additional fields from {client_id} file {file_id}"
+            )
+
+            # VSS calculated fields (following BASEII pattern)
+            VSS_FIELDS: list[Type[VSSCalculatedField]] = [
+                vss_report_type,
+                vss_aggregation_level,
+            ]
+
+            fields = []
+            for field_class in VSS_FIELDS:
+                calculated_field = field_class(
+                    client_data,
+                    file_data,
+                    vss_type,
+                ).calculate(data)
+                calculated_field.name = field_class.__name__
+                fields.append(calculated_field)
+
+            calculated_df = pd.concat(fields, axis=1)
+
+            log.logger.info(
+                f"Saving VSS {vss_type} calculated fields from {client_id} file {file_id}"
+            )
+            fs.write_parquet(
+                calculated_df, target_layer, client_id, file_id, subdir=target_subdir
+            )
+
+        except Exception as e:
+            log.logger.error(f"Error calculating VSS {vss_type}: {str(e)}")
+            raise
+
+
