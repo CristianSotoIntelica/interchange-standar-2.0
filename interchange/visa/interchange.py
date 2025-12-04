@@ -38,7 +38,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
     """
     db = Database()
     df = db.read_records(
-        table_name="visa_rules",
+        table_name="visa_rules_2",
         fields=[
             "region_country_code",
             "valid_from",
@@ -66,6 +66,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             "issuer_bin_8",
             "acquirer_bin",
             "acquirer_business_id",
+            "transaction_amount_currency",
             "transaction_amount",
             "acquirer_country",
             "acquirer_region",
@@ -101,6 +102,8 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             "national_tax_indicator",
             "merchant_vat",
             "summary_commodity",
+            "processing_code_transaction_type",
+            "point_of_service_condition_code",
         ],
     )
     int_cols = ["intelica_id"]
@@ -123,6 +126,8 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                 columns=[
                     "acquirer_country",
                     "acquirer_region",
+                    "processing_code_transaction_type",
+                    "point_of_service_condition_code",
                 ],
                 inplace=True,
             )
@@ -160,6 +165,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                     "national_tax_indicator",
                     "prepaid_card_indicator",
                     "summary_commodity",
+                    "transaction_amount_currency",
                     "transaction_code_qualifier",
                     "type_purchase",
                 ],
@@ -171,9 +177,9 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                     "acceptance_terminal_indicator": "pos_terminal_type",
                     "acquirer_business_id": "acquirer_business_id_sms",
                     "authorization_characteristics_indicator": "authorization_characteristics_indicator_sms",
-                    "authorization_code": "authorization_id_resp._code",
+                    "authorization_code": "authorization_code_valid",
                     "authorization_response_code": "response_code",
-                    "business_application_id": "sender_reference_number_sms",
+                    "business_application_id": "business_application_identifier",
                     "cardholder_id_method": "customer_identification_method",
                     "cvv2_result_code": "cvv_result_code_sms",
                     "dynamic_currency_conversion_indicator": "dcc_indicator_sms",
@@ -196,7 +202,6 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                     "transaction_amount": "source_amount",
                     "transaction_code_qualifier": "draft_code_qualifier_0",
                     "transaction_code": "transaction_code_sms",
-                    "type_purchase": "type_of_purchase",
                     "usage_code": "usage_code_sms",
                 },
                 inplace=True,
@@ -228,12 +233,17 @@ def _get_exchange_rates(file_date: date, brand: str) -> pd.DataFrame:
 
 
 def _apply_condition_default(
-    condition_name: str, condition_value: str, batch: pd.DataFrame
+    condition_name: str,
+    condition_value: str,
+    batch: pd.DataFrame,
+    column_group_space: list[str],
 ) -> pd.DataFrame:
     """
     Checks conditions that have a specific value.
     """
-    condition_value = condition_value.replace("SPACE", " ").replace("BLANK", "")
+    batch = batch.copy()
+    condition_value = condition_value.strip().upper()
+    condition_value = condition_value.replace("SPACE", " ")
     value_list = condition_value.split(",")
     valid_values = []
     not_valid_values = []
@@ -254,11 +264,20 @@ def _apply_condition_default(
             case True:
                 not_valid_values.extend(reformatted_values)
 
+    temp_col = batch[condition_name]
+    if condition_name in column_group_space:
+        batch["_normalized"] = temp_col.astype(str)
+    else:
+        temp_col = temp_col.astype(str).str.strip()
+        temp_col = temp_col.mask(temp_col.str.len() == 0, "BLANK")
+        batch["_normalized"] = temp_col
+
     filter = batch
     if valid_values:
-        filter = filter[filter[condition_name].astype(str).isin(valid_values)]
+        filter = filter[filter["_normalized"].isin(valid_values)]
     if not_valid_values:
-        filter = filter[~filter[condition_name].astype(str).isin(not_valid_values)]
+        filter = filter[~filter["_normalized"].isin(not_valid_values)]
+    filter = filter.drop(columns="_normalized")
 
     return filter
 
@@ -289,6 +308,9 @@ def _apply_condition_greater_less(
             .astype(float)
             .between(range_low, range_high, inclusive="both")
         ]
+    elif condition_value.replace(".", "", 1).isdigit():
+        numeric_value = float(condition_value)
+        filter = batch[batch[condition_name].astype(float) == numeric_value]
     else:
         raise ValueError
 
@@ -356,11 +378,20 @@ def _apply_condition(
     # Otherwise, evaluate the condition.
     column_group_greater_less = [
         "surcharge_amount",
+        "surcharge_amount_sms",
         "timeliness",
     ]
     column_group_amount_currency = [
         "source_amount",
     ]
+    column_group_space = [
+        "nnss_indicator",
+        "cardholder_id_method",
+        "moto_eci_indicator",
+        "acceptance_terminal_indicator",
+        "merchant_vat",
+    ]
+
     match condition_name:
         case name if name in column_group_greater_less:
             result = _apply_condition_greater_less(
@@ -371,13 +402,17 @@ def _apply_condition(
                 condition_name, condition_value, batch, rates
             )
         case _:
-            result = _apply_condition_default(condition_name, condition_value, batch)
+            result = _apply_condition_default(
+                condition_name, condition_value, batch, column_group_space
+            )
 
     return result
 
 
 def _evaluate_interchange_fees(
-    transactions: pd.DataFrame, rules: pd.DataFrame, rates: pd.DataFrame
+    transactions: pd.DataFrame,
+    rules: pd.DataFrame,
+    rates: pd.DataFrame,
 ) -> pd.DataFrame:
     """
     Evaluate interchange fee criteria for a dataset of transactions.

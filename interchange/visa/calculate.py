@@ -180,10 +180,23 @@ class business_mode(CalculatedField):
                         & (self.file["file_type"] == "IN")
                     ),
                 ]
-                condition_values = ["A", "I", "I", "A"]  # Acquiring or Issuing
+                condition_values = [
+                    "Acquiring",
+                    "Issuing",
+                    "Issuing",
+                    "Acquiring",
+                ]  # Acquiring or Issuing
                 return pd.Series(np.select(conditions, condition_values, default=""))
             case "sms":
-                return source["issuer_acquirer_indicator"]
+                conditions = [
+                    (source["issuer_acquirer_indicator"] == "A"),
+                    (source["issuer_acquirer_indicator"] == "I"),
+                ]
+                condition_values = [
+                    "Acquiring",
+                    "Issuing",
+                ]
+                return pd.Series(np.select(conditions, condition_values, default=""))
             case _:
                 raise NotImplementedError
 
@@ -415,18 +428,25 @@ class jurisdiction(CalculatedField):
         country = db.read_records(
             table_name="country",
             fields=["country_code", "visa_region_code"],
-        )
-        country.rename(
+        ).rename(
             columns={
                 "country_code": "merchant_country_code",
                 "visa_region_code": "merchant_region_code",
-            },
-            inplace=True,
+            }
         )
+
+        country_ardef = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        ).rename(
+            columns={
+                "country_code": "ardef_country",
+                "visa_region_code": "ardef_region",
+            }
+        )
+
         ar_countries = self._get_from_ardef(source["account_interval"], "ardef_country")
         ar_countries.name = "ardef_country"
-        ar_regions = self._get_from_ardef(source["account_interval"], "ardef_region")
-        ar_regions.name = "ardef_region"
         issuing_bins_6 = str(self.client["issuing_bins_6_digits"]).split(",")
         issuing_bins_8 = str(self.client["issuing_bins_8_digits"]).split(",")
         acquiring_bins = str(self.client["acquiring_bins"]).split(",")
@@ -439,7 +459,11 @@ class jurisdiction(CalculatedField):
                     on="merchant_country_code",
                 )
                 source = source.join(ar_countries, how="left")
-                source = source.join(ar_regions, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
                 conditions = [
                     (
                         (source["merchant_country_code"] == source["ardef_country"])
@@ -500,7 +524,11 @@ class jurisdiction(CalculatedField):
                     right_on="merchant_country_code",
                 )
                 source = source.join(ar_countries, how="left")
-                source = source.join(ar_regions, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
                 conditions = [
                     (
                         (source["merchant_country_code"] == source["ardef_country"])
@@ -558,18 +586,24 @@ class jurisdiction_assigned(CalculatedField):
         country = db.read_records(
             table_name="country",
             fields=["country_code", "visa_region_code"],
-        )
-        country.rename(
+        ).rename(
             columns={
                 "country_code": "merchant_country_code",
                 "visa_region_code": "merchant_region_code",
-            },
-            inplace=True,
+            }
+        )
+
+        country_ardef = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        ).rename(
+            columns={
+                "country_code": "ardef_country",
+                "visa_region_code": "ardef_region",
+            }
         )
         ar_countries = self._get_from_ardef(source["account_interval"], "ardef_country")
         ar_countries.name = "ardef_country"
-        ar_regions = self._get_from_ardef(source["account_interval"], "ardef_region")
-        ar_regions.name = "ardef_region"
         match type_record:
             case "draft":
                 source = pd.merge(
@@ -579,7 +613,11 @@ class jurisdiction_assigned(CalculatedField):
                     on="merchant_country_code",
                 )
                 source = source.join(ar_countries, how="left")
-                source = source.join(ar_regions, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
                 source["jurisdiction_assigned"] = ""  # Initialize field
                 source.loc[
                     (source["merchant_country_code"] == source["ardef_country"]),
@@ -609,7 +647,11 @@ class jurisdiction_assigned(CalculatedField):
                     right_on="merchant_country_code",
                 )
                 source = source.join(ar_countries, how="left")
-                source = source.join(ar_regions, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
                 source["jurisdiction_assigned"] = ""  # Initialize field
                 source.loc[
                     (source["merchant_country_code"] == source["ardef_country"]),
