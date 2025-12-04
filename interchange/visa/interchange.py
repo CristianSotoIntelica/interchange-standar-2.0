@@ -38,7 +38,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
     """
     db = Database()
     df = db.read_records(
-        table_name="visa_rules",
+        table_name="visa_rules_2",
         fields=[
             "region_country_code",
             "valid_from",
@@ -66,6 +66,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             "issuer_bin_8",
             "acquirer_bin",
             "acquirer_business_id",
+            "transaction_amount_currency",
             "transaction_amount",
             "acquirer_country",
             "acquirer_region",
@@ -101,6 +102,8 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
             "national_tax_indicator",
             "merchant_vat",
             "summary_commodity",
+            "processing_code_transaction_type",
+            "point_of_service_condition_code",
         ],
     )
     int_cols = ["intelica_id"]
@@ -123,6 +126,8 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                 columns=[
                     "acquirer_country",
                     "acquirer_region",
+                    "processing_code_transaction_type",
+                    "point_of_service_condition_code",
                 ],
                 inplace=True,
             )
@@ -149,19 +154,67 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                 inplace=True,
             )
             return df_valid
+        case "sms":
+            df_valid.drop(
+                columns=[
+                    "acquirer_country",
+                    "acquirer_region",
+                    "authorized_amount",
+                    "business_format_code",
+                    "merchant_vat",
+                    "national_tax_indicator",
+                    "prepaid_card_indicator",
+                    "summary_commodity",
+                    "transaction_amount_currency",
+                    "transaction_code_qualifier",
+                    "type_purchase",
+                ],
+                inplace=True,
+            )
+            df_valid.rename(
+                columns={
+                    "account_funding_source": "funding_source",
+                    "acceptance_terminal_indicator": "pos_terminal_type",
+                    "acquirer_business_id": "acquirer_business_id_sms",
+                    "authorization_characteristics_indicator": "authorization_characteristics_indicator_sms",
+                    "authorization_code": "authorization_code_valid",
+                    "authorization_response_code": "response_code",
+                    "business_application_id": "business_application_identifier",
+                    "cardholder_id_method": "customer_identification_method",
+                    "cvv2_result_code": "cvv_result_code_sms",
+                    "dynamic_currency_conversion_indicator": "dcc_indicator_sms",
+                    "fee_program_indicator": "fee_program_indicator_sms",
+                    "merchant_category_code": "merchant's_type",
+                    "merchant_country_code": "jurisdiction_country",
+                    "merchant_country_region": "jurisdiction_region",
+                    "merchant_verification_value": "mvv_code",
+                    "message_reason_code": "message_reason_code_sms",
+                    "moto_eci_indicator": "mail_telephone_or_electronic_commerce_indicator",
+                    "network_identification_code": "network_id",
+                    "point_of_service_condition_code": "pos_condition_code",
+                    "pos_environment_code": "recurring_payment_indicator_flag",
+                    "pos_entry_mode": "pos_entry_mode_sms",
+                    "pos_terminal_capability": "pos_terminal_entry_capability",
+                    "reimbursement_attribute": "reimbursement_attribute_sms",
+                    "special_condition_indicator": "chargeback_special_condition_merchant_indicator",
+                    "summary_commodity": "summary_commodity_code",
+                    "surcharge_amount": "surcharge_amount_sms",
+                    "transaction_amount": "source_amount",
+                    "transaction_code_qualifier": "draft_code_qualifier_0",
+                    "transaction_code": "transaction_code_sms",
+                    "usage_code": "usage_code_sms",
+                },
+                inplace=True,
+            )
+            return df_valid
         case _:
             raise NotImplementedError
 
 
-def _get_exchange_rates(file_date: date, type_record: str) -> pd.DataFrame:
+def _get_exchange_rates(file_date: date, brand: str) -> pd.DataFrame:
     """
     Get the exchange rates valid for the file's processing date and brand.
     """
-    match type_record:
-        case "draft":
-            brand = "VISA"
-        case _:
-            raise NotImplementedError
     date_string = file_date.strftime("%Y-%m-%d")
     db = Database()
     df = db.read_records(
@@ -180,12 +233,17 @@ def _get_exchange_rates(file_date: date, type_record: str) -> pd.DataFrame:
 
 
 def _apply_condition_default(
-    condition_name: str, condition_value: str, batch: pd.DataFrame
+    condition_name: str,
+    condition_value: str,
+    batch: pd.DataFrame,
+    column_group_space: list[str],
 ) -> pd.DataFrame:
     """
     Checks conditions that have a specific value.
     """
-    condition_value = condition_value.replace("SPACE", " ").replace("BLANK", "")
+    batch = batch.copy()
+    condition_value = condition_value.strip().upper()
+    condition_value = condition_value.replace("SPACE", " ")
     value_list = condition_value.split(",")
     valid_values = []
     not_valid_values = []
@@ -206,11 +264,20 @@ def _apply_condition_default(
             case True:
                 not_valid_values.extend(reformatted_values)
 
+    temp_col = batch[condition_name]
+    if condition_name in column_group_space:
+        batch["_normalized"] = temp_col.astype(str)
+    else:
+        temp_col = temp_col.astype(str).str.strip()
+        temp_col = temp_col.mask(temp_col.str.len() == 0, "BLANK")
+        batch["_normalized"] = temp_col
+
     filter = batch
     if valid_values:
-        filter = filter[filter[condition_name].astype(str).isin(valid_values)]
+        filter = filter[filter["_normalized"].isin(valid_values)]
     if not_valid_values:
-        filter = filter[~filter[condition_name].astype(str).isin(not_valid_values)]
+        filter = filter[~filter["_normalized"].isin(not_valid_values)]
+    filter = filter.drop(columns="_normalized")
 
     return filter
 
@@ -222,13 +289,9 @@ def _apply_condition_greater_less(
     Check numeric conditions where a value falls in a specified range.
     """
     if any(x in condition_value for x in ["<", ">", "="]):
-        query_condition = (
-            f"{condition_name} "
-            + condition_value.replace('<=', '<= ')
-            .replace('>=', '>= ')
-            .replace('>', '> ')
-            .replace('<', '< ')
-        )
+        query_condition = f"{condition_name} " + condition_value.replace(
+            "<=", "<= "
+        ).replace(">=", ">= ").replace(">", "> ").replace("<", "< ")
 
         filter = batch.query(query_condition)
     elif any(x in condition_value for x in ["BETWEEN", "AND"]):
@@ -245,6 +308,9 @@ def _apply_condition_greater_less(
             .astype(float)
             .between(range_low, range_high, inclusive="both")
         ]
+    elif condition_value.replace(".", "", 1).isdigit():
+        numeric_value = float(condition_value)
+        filter = batch[batch[condition_name].astype(float) == numeric_value]
     else:
         raise ValueError
 
@@ -276,13 +342,9 @@ def _apply_condition_amount_currency(
     filter["comparison_value"] = filter[condition_name] * filter["exchange_value"]
 
     if any(x in string_range for x in ["<", ">", "="]):
-        query_condition = (
-            f"comparison_value "
-            + string_range.replace('<=', '<= ')
-            .replace('>=', '>= ')
-            .replace('>', '> ')
-            .replace('<', '< ')
-        )
+        query_condition = f"comparison_value " + string_range.replace(
+            "<=", "<= "
+        ).replace(">=", ">= ").replace(">", "> ").replace("<", "< ")
 
         filter = filter.query(query_condition)
     elif any(x in string_range for x in ["BETWEEN", "AND"]):
@@ -316,11 +378,20 @@ def _apply_condition(
     # Otherwise, evaluate the condition.
     column_group_greater_less = [
         "surcharge_amount",
+        "surcharge_amount_sms",
         "timeliness",
     ]
     column_group_amount_currency = [
         "source_amount",
     ]
+    column_group_space = [
+        "nnss_indicator",
+        "cardholder_id_method",
+        "moto_eci_indicator",
+        "acceptance_terminal_indicator",
+        "merchant_vat",
+    ]
+
     match condition_name:
         case name if name in column_group_greater_less:
             result = _apply_condition_greater_less(
@@ -331,13 +402,17 @@ def _apply_condition(
                 condition_name, condition_value, batch, rates
             )
         case _:
-            result = _apply_condition_default(condition_name, condition_value, batch)
+            result = _apply_condition_default(
+                condition_name, condition_value, batch, column_group_space
+            )
 
     return result
 
 
 def _evaluate_interchange_fees(
-    transactions: pd.DataFrame, rules: pd.DataFrame, rates: pd.DataFrame
+    transactions: pd.DataFrame,
+    rules: pd.DataFrame,
+    rates: pd.DataFrame,
 ) -> pd.DataFrame:
     """
     Evaluate interchange fee criteria for a dataset of transactions.
@@ -498,7 +573,7 @@ def calculate_baseii_interchange(
     )
 
     log.logger.info(f"Reading exchange rate data for {client_id} file {file_id}")
-    rates = _get_exchange_rates(file_data["file_processing_date"], type_record="draft")
+    rates = _get_exchange_rates(file_data["file_processing_date"], brand="VISA")
 
     log.logger.info(f"Evaluating fee criteria for {client_id} file {file_id}")
     fee_parameters = _evaluate_interchange_fees(merged_data, rules_data, rates)
@@ -512,5 +587,53 @@ def calculate_baseii_interchange(
     )
 
 
-def calculate_sms_interchange() -> None:
-    raise NotImplementedError
+def calculate_sms_interchange(
+    origin_layer: FileStorage.Layer,
+    target_layer: FileStorage.Layer,
+    client_id: str,
+    file_id: str,
+    transactions_subdir="300-SMS_CLN_MESSAGES",
+    calculated_subdir="400-SMS_CAL_MESSAGES",
+    target_subdir="500-SMS_ITX_MESSAGES",
+) -> None:
+    """
+    Calculate interchange fee fields for SMS transaction data.
+    """
+    log.logger.info(f"Reading clean SMS Transactions from {client_id} file {file_id}")
+    transactions = fs.read_parquet(
+        origin_layer,
+        client_id,
+        file_id,
+        subdir=transactions_subdir,
+    )
+    log.logger.info(f"Reading calculated field data from {client_id} file {file_id}")
+    calculated = fs.read_parquet(
+        origin_layer,
+        client_id,
+        file_id,
+        subdir=calculated_subdir,
+    )
+    log.logger.info(
+        f"Merging transactional and calculated data from {client_id} file {file_id}"
+    )
+    merged_data = transactions.join(calculated, how="left", lsuffix="_sms")
+
+    log.logger.info(f"Reading visa rule definitions for {client_id} file {file_id}")
+    file_data = _get_file_data(client_id, file_id)
+    rules_data = _get_visa_rule_definitions(
+        file_data["file_processing_date"], type_record="sms"
+    )
+
+    log.logger.info(f"Reading exchange rate data for {client_id} file {file_id}")
+    rates = _get_exchange_rates(file_data["file_processing_date"], brand="VISA")
+
+    log.logger.info(f"Evaluating fee criteria for {client_id} file {file_id}")
+    fee_parameters = _evaluate_interchange_fees(merged_data, rules_data, rates)
+
+    log.logger.info(f"Calculating fee amounts for {client_id} file {file_id}")
+    interchange_df = _calculate_interchange_fees(fee_parameters, rates)
+
+    log.logger.info(f"Saving Visa interchange fields for {client_id} file {file_id}")
+    fs.write_parquet(
+        interchange_df, target_layer, client_id, file_id, subdir=target_subdir
+    )

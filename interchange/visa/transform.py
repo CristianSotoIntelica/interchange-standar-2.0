@@ -65,8 +65,48 @@ def transform_baseii_drafts(
     fs.write_parquet(drafts_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
-def transform_sms_messages() -> None:
-    raise NotImplementedError
+def transform_sms_messages(
+    origin_layer: FileStorage.Layer,
+    target_layer: FileStorage.Layer,
+    client_id: str,
+    file_id: str,
+    origin_subdir="",
+    target_subdir="100-SMS_RAW_MESSAGES",
+) -> None:
+    """
+    Reorganize messages into individual records of raw transaction data.
+    """
+    VALID_TC = ["33"]
+    VALID_TCSN = ["0"]
+    VALID_SMS_TYPES = ["SMSRAWDATA"]
+    VALID_RAW_DATA_VERSION = ["V22"]
+    VALID_RECORD_TYPES = [
+        # "22000",
+        "22200",
+        "22210",
+        "22220",
+        "22225",
+        "22226",
+        "22230",
+        "22250",
+        "22260",
+        "22261",
+        "22280",
+        "22281",
+        "22282",
+    ]
+    log.logger.info(f"Opening {client_id} file {file_id} as CTF")
+    ctf_records = _load_as_ctf(origin_layer, client_id, file_id, subdir=origin_subdir)
+    log.logger.info(f"Extracting Raw SMS Messages from {client_id} file {file_id}")
+    drafts = ctf_records[
+        ctf_records.str.slice(stop=2).isin(VALID_TC)
+        & ctf_records.str.slice(start=3, stop=4).isin(VALID_TCSN)
+        & ctf_records.str.slice(start=16, stop=26).isin(VALID_SMS_TYPES)
+        & ctf_records.str.slice(start=34, stop=37).isin(VALID_RAW_DATA_VERSION)
+    ]
+    drafts_df = _pivot_values_on_key(drafts, start=35, stop=40, cols=VALID_RECORD_TYPES)
+    log.logger.info(f"Saving Raw SMS Transactions from {client_id} file {file_id}")
+    fs.write_parquet(drafts_df, target_layer, client_id, file_id, subdir=target_subdir)
 
 
 def transform_vss_records(

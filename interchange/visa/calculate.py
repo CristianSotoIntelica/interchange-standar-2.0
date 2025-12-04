@@ -50,10 +50,21 @@ class CalculatedField(ABC):
         pass
 
 
+class acquirer_bin(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "sms":
+                return source["retrieval_reference_number"].str.slice(0, 6)
+            case _:
+                raise NotImplementedError
+
+
 class ardef_country(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
+                return self._get_from_ardef(source["account_interval"], "ardef_country")
+            case "sms":
                 return self._get_from_ardef(source["account_interval"], "ardef_country")
             case _:
                 raise NotImplementedError
@@ -75,6 +86,19 @@ class authorization_code_valid(CalculatedField):
                 return pd.Series(
                     np.select(conditions, condition_values, default="VALID")
                 )
+            case "sms":
+                conditions = [
+                    (source["authorization_id_resp._code"].str[-1] == "x"),
+                    (
+                        source["authorization_id_resp._code"]
+                        .str[-5:]
+                        .isin([" ", "0000", "00000", "0000n", "0000p", "0000y"])
+                    ),
+                ]
+                condition_values = ["INVALID", "INVALID"]
+                return pd.Series(
+                    np.select(conditions, condition_values, default="VALID")
+                )
             case _:
                 raise NotImplementedError
 
@@ -83,6 +107,10 @@ class b2b_program_id(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "b2b_program_id"
+                )
+            case "sms":
                 return self._get_from_ardef(
                     source["account_interval"], "b2b_program_id"
                 )
@@ -152,7 +180,22 @@ class business_mode(CalculatedField):
                         & (self.file["file_type"] == "IN")
                     ),
                 ]
-                condition_values = ["A", "I", "I", "A"]  # Acquiring or Issuing
+                condition_values = [
+                    "Acquiring",
+                    "Issuing",
+                    "Issuing",
+                    "Acquiring",
+                ]  # Acquiring or Issuing
+                return pd.Series(np.select(conditions, condition_values, default=""))
+            case "sms":
+                conditions = [
+                    (source["issuer_acquirer_indicator"] == "A"),
+                    (source["issuer_acquirer_indicator"] == "I"),
+                ]
+                condition_values = [
+                    "Acquiring",
+                    "Issuing",
+                ]
                 return pd.Series(np.select(conditions, condition_values, default=""))
             case _:
                 raise NotImplementedError
@@ -198,6 +241,124 @@ class business_transaction_type(CalculatedField):
                 ]
                 condition_values = [1, 3, 19, 20, 25, 21, 22]
                 return pd.Series(np.select(conditions, condition_values, default=255))
+            case "sms":
+                rmt = source["request_message_type"]
+                rc = source["response_code"]
+                pc = source["processing_code"].str[:2]
+                pos = source["pos_condition_code"]
+                mcc = source["merchant's_type"]
+
+                # Condiciones del primer bloque: response_code = '00'
+                cond_success = rmt.isin(["0200", "0220", "0400", "0420"]) & (rc == "00")
+
+                # Segundo bloque: response_code != '00'
+                cond_decline = rmt.isin(["0200", "0220", "0400", "0420"]) & (rc != "00")
+
+                conditions = [
+                    (
+                        cond_success
+                        & (pc == "00")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "01")
+                        & ~pos.isin(["13", "51"])
+                        & (mcc == 6010)
+                    ),
+                    (
+                        cond_success
+                        & (pc == "01")
+                        & ~pos.isin(["13", "51"])
+                        & (mcc == 6011)
+                    ),
+                    (
+                        cond_success
+                        & (pc == "10")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "11")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "19")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "20")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "22")
+                        & pos.isin(["13"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "26")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "29")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (
+                        cond_success
+                        & (pc == "30")
+                        & ~pos.isin(["13", "51"])
+                        & (mcc == 6011)
+                    ),
+                    (
+                        cond_success
+                        & (pc == "40")
+                        & ~pos.isin(["13", "51"])
+                        & (mcc == 6011)
+                    ),
+                    (
+                        cond_success
+                        & (pc == "50")
+                        & ~pos.isin(["13", "51"])
+                        & ~mcc.isin([4815, 6010, 6011])
+                    ),
+                    (cond_decline & (mcc != 6011)),
+                    (cond_decline & (mcc == 6011)),
+                ]
+
+                condition_values = [
+                    1,
+                    21,
+                    22,
+                    30,
+                    3,
+                    115,
+                    19,
+                    20,
+                    25,
+                    200,
+                    247,
+                    250,
+                    27,
+                    236,
+                    249,
+                ]
+
+                return pd.Series(
+                    np.select(conditions, condition_values, default=np.nan),
+                    index=source.index,
+                )
             case _:
                 raise NotImplementedError
 
@@ -206,6 +367,8 @@ class fast_funds(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
+                return self._get_from_ardef(source["account_interval"], "fast_funds")
+            case "sms":
                 return self._get_from_ardef(source["account_interval"], "fast_funds")
             case _:
                 raise NotImplementedError
@@ -218,6 +381,10 @@ class funding_source(CalculatedField):
                 return self._get_from_ardef(
                     source["account_interval"], "account_funding_source"
                 )
+            case "sms":
+                return self._get_from_ardef(
+                    source["account_interval"], "account_funding_source"
+                )
             case _:
                 raise NotImplementedError
 
@@ -227,6 +394,8 @@ class issuer_bin_8(CalculatedField):
         match type_record:
             case "draft":
                 return source["account_number"].str.replace("*", "0").str.slice(0, 8)
+            case "sms":
+                return source["card_number"].str.replace("*", "0").str.slice(0, 8)
             case _:
                 raise NotImplementedError
 
@@ -236,6 +405,8 @@ class issuer_country(CalculatedField):
         match type_record:
             case "draft":
                 return self._get_from_ardef(source["account_interval"], "country")
+            case "sms":
+                return self._get_from_ardef(source["account_interval"], "country")
             case _:
                 raise NotImplementedError
 
@@ -244,6 +415,8 @@ class issuer_region(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
+                return self._get_from_ardef(source["account_interval"], "region")
+            case "sms":
                 return self._get_from_ardef(source["account_interval"], "region")
             case _:
                 raise NotImplementedError
@@ -255,18 +428,25 @@ class jurisdiction(CalculatedField):
         country = db.read_records(
             table_name="country",
             fields=["country_code", "visa_region_code"],
-        )
-        country.rename(
+        ).rename(
             columns={
                 "country_code": "merchant_country_code",
                 "visa_region_code": "merchant_region_code",
-            },
-            inplace=True,
+            }
         )
+
+        country_ardef = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        ).rename(
+            columns={
+                "country_code": "ardef_country",
+                "visa_region_code": "ardef_region",
+            }
+        )
+
         ar_countries = self._get_from_ardef(source["account_interval"], "ardef_country")
         ar_countries.name = "ardef_country"
-        ar_regions = self._get_from_ardef(source["account_interval"], "ardef_region")
-        ar_regions.name = "ardef_region"
         issuing_bins_6 = str(self.client["issuing_bins_6_digits"]).split(",")
         issuing_bins_8 = str(self.client["issuing_bins_8_digits"]).split(",")
         acquiring_bins = str(self.client["acquiring_bins"]).split(",")
@@ -279,7 +459,11 @@ class jurisdiction(CalculatedField):
                     on="merchant_country_code",
                 )
                 source = source.join(ar_countries, how="left")
-                source = source.join(ar_regions, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
                 conditions = [
                     (
                         (source["merchant_country_code"] == source["ardef_country"])
@@ -331,6 +515,67 @@ class jurisdiction(CalculatedField):
                     "interregional",
                 ]
                 return pd.Series(np.select(conditions, condition_values, default=""))
+            case "sms":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    left_on="card_acceptor_country",
+                    right_on="merchant_country_code",
+                )
+                source = source.join(ar_countries, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
+                conditions = [
+                    (
+                        (source["merchant_country_code"] == source["ardef_country"])
+                        & (source["issuer_acquirer_indicator"] == "A")
+                        & (
+                            (
+                                source["card_number"]
+                                .str.replace("*", "0")
+                                .str.slice(0, 6)
+                                .isin(issuing_bins_6)
+                            )
+                            | (
+                                source["card_number"]
+                                .str.replace("*", "0")
+                                .str.slice(0, 8)
+                                .isin(issuing_bins_8)
+                            )
+                        )
+                    ),
+                    (
+                        (source["merchant_country_code"] == source["ardef_country"])
+                        & (source["issuer_acquirer_indicator"] == "I")
+                        & (
+                            source["acquiring_institution_id_1"]
+                            .astype(str)
+                            .str.zfill(6)
+                            .isin(acquiring_bins)
+                        )
+                    ),
+                    (source["merchant_country_code"] == source["ardef_country"]),
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] == source["ardef_region"])
+                    ),
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] != source["ardef_region"])
+                    ),
+                ]
+                condition_values = [
+                    "on-us",
+                    "on-us",
+                    "off-us",
+                    "intraregional",
+                    "interregional",
+                ]
+                return pd.Series(np.select(conditions, condition_values, default=""))
             case _:
                 raise NotImplementedError
 
@@ -341,18 +586,24 @@ class jurisdiction_assigned(CalculatedField):
         country = db.read_records(
             table_name="country",
             fields=["country_code", "visa_region_code"],
-        )
-        country.rename(
+        ).rename(
             columns={
                 "country_code": "merchant_country_code",
                 "visa_region_code": "merchant_region_code",
-            },
-            inplace=True,
+            }
+        )
+
+        country_ardef = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        ).rename(
+            columns={
+                "country_code": "ardef_country",
+                "visa_region_code": "ardef_region",
+            }
         )
         ar_countries = self._get_from_ardef(source["account_interval"], "ardef_country")
         ar_countries.name = "ardef_country"
-        ar_regions = self._get_from_ardef(source["account_interval"], "ardef_region")
-        ar_regions.name = "ardef_region"
         match type_record:
             case "draft":
                 source = pd.merge(
@@ -362,7 +613,45 @@ class jurisdiction_assigned(CalculatedField):
                     on="merchant_country_code",
                 )
                 source = source.join(ar_countries, how="left")
-                source = source.join(ar_regions, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
+                source["jurisdiction_assigned"] = ""  # Initialize field
+                source.loc[
+                    (source["merchant_country_code"] == source["ardef_country"]),
+                    "jurisdiction_assigned",
+                ] = source["merchant_country_code"]
+                source.loc[
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] == source["ardef_region"])
+                    ),
+                    "jurisdiction_assigned",
+                ] = source["ardef_region"]
+                source.loc[
+                    (
+                        (source["merchant_country_code"] != source["ardef_country"])
+                        & (source["merchant_region_code"] != source["ardef_region"])
+                    ),
+                    "jurisdiction_assigned",
+                ] = "9"  # Interregional
+                return source["jurisdiction_assigned"]
+            case "sms":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    left_on="card_acceptor_country",
+                    right_on="merchant_country_code",
+                )
+                source = source.join(ar_countries, how="left")
+                source = source.merge(
+                    country_ardef,
+                    how="left",
+                    on="ardef_country",
+                )
                 source["jurisdiction_assigned"] = ""  # Initialize field
                 source.loc[
                     (source["merchant_country_code"] == source["ardef_country"]),
@@ -392,6 +681,8 @@ class jurisdiction_country(CalculatedField):
         match type_record:
             case "draft":
                 return source["merchant_country_code"]
+            case "sms":
+                return source["card_acceptor_country"]
             case _:
                 raise NotImplementedError
 
@@ -417,6 +708,15 @@ class jurisdiction_region(CalculatedField):
                     country,
                     how="left",
                     on="merchant_country_code",
+                )
+                return source["merchant_region_code"]
+            case "sms":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    left_on="card_acceptor_country",
+                    right_on="merchant_country_code",
                 )
                 return source["merchant_region_code"]
             case _:
@@ -466,6 +766,19 @@ class nnss_indicator(CalculatedField):
                 return self._get_from_ardef(
                     source["account_interval"], "nnss_indicator"
                 )
+            case "sms":
+                return self._get_from_ardef(
+                    source["account_interval"], "nnss_indicator"
+                )
+            case _:
+                raise NotImplementedError
+
+
+class processing_code_transaction_type(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "sms":
+                return source["processing_code"].str.slice(0, 2)
             case _:
                 raise NotImplementedError
 
@@ -475,6 +788,8 @@ class product_id(CalculatedField):
         match type_record:
             case "draft":
                 return self._get_from_ardef(source["account_interval"], "product_id")
+            case "sms":
+                return self._get_from_ardef(source["account_interval"], "product_id")
             case _:
                 raise NotImplementedError
 
@@ -483,6 +798,10 @@ class product_subtype(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "product_subtype"
+                )
+            case "sms":
                 return self._get_from_ardef(
                     source["account_interval"], "product_subtype"
                 )
@@ -499,6 +818,28 @@ class reversal_indicator(CalculatedField):
                 ]
                 condition_values = [1]
                 return pd.Series(np.select(conditions, condition_values, default=0))
+            case "sms":
+                conditions = [
+                    (
+                        source["request_message_type"].isin(["0200", "0220"])
+                        & source["response_code"].isin(["00"])
+                    ),
+                    (
+                        source["request_message_type"].isin(["0400", "0420"])
+                        & source["response_code"].isin(["00"])
+                    ),
+                ]
+                condition_values = [0, 1]
+                return pd.Series(np.select(conditions, condition_values, default=0))
+            case _:
+                raise NotImplementedError
+
+
+class source_amount(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        match type_record:
+            case "sms":
+                return source["draft_amount"]
             case _:
                 raise NotImplementedError
 
@@ -524,6 +865,15 @@ class source_currency_code_alphabetic(CalculatedField):
                     country,
                     how="left",
                     on="source_currency_code",
+                )
+                return source["source_currency_code_alphabetic"]
+            case "sms":
+                source = pd.merge(
+                    source,
+                    country,
+                    how="left",
+                    left_on="draft_currency_code",
+                    right_on="source_currency_code",
                 )
                 return source["source_currency_code_alphabetic"]
             case _:
@@ -553,6 +903,10 @@ class technology_indicator(CalculatedField):
                 return self._get_from_ardef(
                     source["account_interval"], "technology_indicator"
                 )
+            case "sms":
+                return self._get_from_ardef(
+                    source["account_interval"], "technology_indicator"
+                )
             case _:
                 raise NotImplementedError
 
@@ -564,6 +918,75 @@ class timeliness(CalculatedField):
                 return (
                     source["central_processing_date"] - source["purchase_date"]
                 ).dt.days
+            case "sms":
+                return (
+                    source["settlement_date_sms"] - source["local_draft_date"]
+                ).dt.days
+            case _:
+                raise NotImplementedError
+
+
+class transaction_code_sms(CalculatedField):
+    def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        db = Database()
+        transaction_type = db.read_records(
+            table_name="visa_transaction_type",
+            fields=["business_transaction_type_id", "transaction_type_id"],
+        )
+
+        btt_series = business_transaction_type(
+            self.client,
+            self.file,
+            self.ardef,
+        ).calculate(source, type_record)
+        btt_series.name = "business_transaction_type_id"
+
+        reversal_series = reversal_indicator(
+            self.client,
+            self.file,
+            self.ardef,
+        ).calculate(source, type_record)
+        reversal_series.name = "reversal_indicator"
+
+        df = pd.DataFrame(
+            {
+                "business_transaction_type_id": btt_series,
+                "reversal_indicator": reversal_series,
+            }
+        )
+        df["business_transaction_type_id"] = (
+            df["business_transaction_type_id"]
+            .astype(float)  # asegura que todos sean números
+            .astype("Int64")  # Pandas Int64 acepta NaN
+            .astype(str)  # finalmente a string para merge con transaction_type
+        )
+        df = df.merge(
+            transaction_type[["business_transaction_type_id", "transaction_type_id"]],
+            on="business_transaction_type_id",
+            how="left",
+        )
+        match type_record:
+            case "sms":
+                conditions = [
+                    (df["transaction_type_id"] == "PUR")
+                    & (df["reversal_indicator"] == 0),
+                    (df["transaction_type_id"] == "CRD")
+                    & (df["reversal_indicator"] == 0),
+                    (df["transaction_type_id"] == "CSH")
+                    & (df["reversal_indicator"] == 0),
+                    (df["transaction_type_id"] == "PUR")
+                    & (df["reversal_indicator"] == 1),
+                    (df["transaction_type_id"] == "CRD")
+                    & (df["reversal_indicator"] == 1),
+                    (df["transaction_type_id"] == "CSH")
+                    & (df["reversal_indicator"] == 1),
+                ]
+
+                condition_values = ["05", "06", "07", "25", "26", "27"]
+                return pd.Series(
+                    np.select(conditions, condition_values, default=""),
+                    index=source.index,
+                )
             case _:
                 raise NotImplementedError
 
@@ -572,6 +995,10 @@ class travel_indicator(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
+                return self._get_from_ardef(
+                    source["account_interval"], "travel_indicator"
+                )
+            case "sms":
                 return self._get_from_ardef(
                     source["account_interval"], "travel_indicator"
                 )
@@ -778,8 +1205,85 @@ def calculate_baseii_fields(
     )
 
 
-def calculate_sms_fields() -> None:
-    raise NotImplementedError
+def calculate_sms_fields(
+    origin_layer: FileStorage.Layer,
+    target_layer: FileStorage.Layer,
+    client_id: str,
+    file_id: str,
+    origin_subdir="300-SMS_CLN_MESSAGES",
+    target_subdir="400-SMS_CAL_MESSAGES",
+) -> None:
+    """
+    Calculate additional fields from clean SMS transaction data.
+    """
+    log.logger.info(f"Reading clean SMS Transactions from {client_id} file {file_id}")
+    data = fs.read_parquet(
+        origin_layer,
+        client_id,
+        file_id,
+        subdir=origin_subdir,
+    )
+    log.logger.info(f"Reading additional metadata for {client_id} file {file_id}")
+    client_data = _get_client_data(client_id)
+    file_data = _get_file_data(client_id, file_id)
+    ardef_data = _get_visa_ardef(file_data["file_processing_date"])
+    log.logger.info(f"Calculating additional fields from {client_id} file {file_id}")
+    data["account_interval"] = pd.cut(
+        data["card_number"].str.replace("*", "0").str.slice(0, 9).astype(int),
+        ardef_data["account_interval"],
+        include_lowest=True,
+    )
+    fill_interval = pd.Interval(left=0, right=0, closed="both")
+    data["account_interval"] = data["account_interval"].cat.add_categories(
+        [fill_interval]
+    )
+    data["account_interval"] = data["account_interval"].where(
+        data["account_interval"].notna(), fill_interval
+    )
+    SMS_FIELDS: list[Type[CalculatedField]] = [
+        acquirer_bin,
+        ardef_country,
+        authorization_code_valid,
+        b2b_program_id,
+        business_mode,
+        business_transaction_type,
+        fast_funds,
+        funding_source,
+        issuer_bin_8,
+        issuer_country,
+        issuer_region,
+        jurisdiction,
+        jurisdiction_assigned,
+        jurisdiction_country,
+        jurisdiction_region,
+        nnss_indicator,
+        processing_code_transaction_type,
+        product_id,
+        product_subtype,
+        reversal_indicator,
+        source_amount,
+        source_currency_code_alphabetic,
+        technology_indicator,
+        timeliness,
+        transaction_code_sms,
+        travel_indicator,
+    ]
+    fields = []
+    for field in SMS_FIELDS:
+        calculated_field = field(
+            client_data,
+            file_data,
+            ardef_data,
+        ).calculate(data, type_record="sms")
+        calculated_field.name = field.__name__
+        fields.append(calculated_field)
+    calculated_df = pd.concat(fields, axis=1)
+    log.logger.info(
+        f"Saving Visa SMS calculated fields from {client_id} file {file_id}"
+    )
+    fs.write_parquet(
+        calculated_df, target_layer, client_id, file_id, subdir=target_subdir
+    )
 
 
 class VSSCalculatedField:
