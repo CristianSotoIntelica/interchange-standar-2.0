@@ -413,11 +413,24 @@ class issuer_country(CalculatedField):
 
 class issuer_region(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
+        db = Database()
+        country = db.read_records(
+            table_name="country",
+            fields=["country_code", "visa_region_code"],
+        )
+        countries = self._get_from_ardef(source["account_interval"], "country")
+        countries = pd.merge(
+            countries,
+            country,
+            how="left",
+            left_on="country",
+            right_on="country_code",
+        )
         match type_record:
             case "draft":
-                return self._get_from_ardef(source["account_interval"], "region")
+                return countries["visa_region_code"]
             case "sms":
-                return self._get_from_ardef(source["account_interval"], "region")
+                return countries["visa_region_code"]
             case _:
                 raise NotImplementedError
 
@@ -915,9 +928,40 @@ class timeliness(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
-                return (
-                    source["central_processing_date"] - source["purchase_date"]
-                ).dt.days
+                # return (
+                #     source["central_processing_date"] - source["purchase_date"]
+                # ).dt.days
+                central_date = pd.to_datetime(source["central_processing_date"])
+                purchase_date = pd.to_datetime(source["purchase_date"])
+
+                # Caso cuando son iguales
+                same_date = central_date == purchase_date
+
+                # Calcular días totales menos 1
+                total_days = (central_date - purchase_date).dt.days - 1
+
+                # Función para contar domingos entre dos fechas
+                def count_sundays(start, end):
+                    if pd.isna(start) or pd.isna(end) or start > end:
+                        return 0
+                    date_range = pd.date_range(start=start, end=end, freq="D")
+                    return (date_range.dayofweek == 6).sum()
+
+                # Aplicar conteo de domingos
+                sundays = source.apply(
+                    lambda row: count_sundays(
+                        pd.to_datetime(row["purchase_date"]) + pd.Timedelta(days=1),
+                        pd.to_datetime(row["central_processing_date"])
+                        - pd.Timedelta(days=1),
+                    )
+                    if not pd.isna(row["purchase_date"])
+                    and not pd.isna(row["central_processing_date"])
+                    else 0,
+                    axis=1,
+                )
+
+                result = np.where(same_date, 0, total_days - sundays)
+                return pd.Series(result, index=source.index)
             case "sms":
                 return (
                     source["settlement_date_sms"] - source["local_draft_date"]
@@ -1319,7 +1363,7 @@ class vss_report_type(VSSCalculatedField):
 class vss_aggregation_level(VSSCalculatedField):
     """
     Aggregation level based on rollup hierarchy.
-    
+
     Logic:
     - Level 10: Top level (rollup_to == reporting_for)
     - Level 1-3: Intermediate levels (reporting to rollup groups)
@@ -1383,9 +1427,9 @@ def calculate_vss_fields(
     target_layer: FileStorage.Layer,
     client_id: str,
     file_id: str,
-    vss_types: list[str] = None,
-    origin_subdir_template: str = None,
-    target_subdir_template: str = None,
+    vss_types: list[str],
+    origin_subdir_template: str,
+    target_subdir_template: str,
 ) -> None:
     """
     Calculate additional fields from clean VSS settlement data.
@@ -1465,5 +1509,3 @@ def calculate_vss_fields(
         except Exception as e:
             log.logger.error(f"Error calculating VSS {vss_type}: {str(e)}")
             raise
-
-
