@@ -38,7 +38,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
     """
     db = Database()
     df = db.read_records(
-        table_name="visa_rules",
+        table_name="visa_rules_2",
         fields=[
             "region_country_code",
             "valid_from",
@@ -135,6 +135,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                 columns={
                     "account_funding_source": "funding_source",
                     "acquirer_bin": "account_reference_number_acquiring_identifier",
+                    "authorization_code": "authorization_code_valid",
                     "cvv2_result_code": "cvv_result_code",
                     "dynamic_currency_conversion_indicator": "dcc_indicator",
                     "merchant_country_code": "jurisdiction_country",
