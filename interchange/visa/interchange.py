@@ -38,7 +38,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
     """
     db = Database()
     df = db.read_records(
-        table_name="visa_rules_2",
+        table_name="visa_rules",
         fields=[
             "region_country_code",
             "valid_from",
@@ -244,14 +244,14 @@ def _apply_condition_default(
     batch = batch.copy()
     condition_value = condition_value.strip().upper()
     condition_value = condition_value.replace("SPACE", " ")
+    not_keyword_flag = False
+    if "NOT:" in condition_value:
+        condition_value = condition_value.replace("NOT:", "")
+        not_keyword_flag = True
     value_list = condition_value.split(",")
     valid_values = []
     not_valid_values = []
     for value in value_list:
-        not_keyword_flag = False
-        if "NOT:" in value:
-            value = value.replace("NOT:", "")
-            not_keyword_flag = True
         filled_range = []
         if "-" in value:
             range_low, range_high = value.split("-", maxsplit=1)
@@ -387,6 +387,7 @@ def _apply_condition(
     column_group_space = [
         "nnss_indicator",
         "cardholder_id_method",
+        "moto_ec_indicator",
         "moto_eci_indicator",
         "acceptance_terminal_indicator",
         "merchant_vat",
