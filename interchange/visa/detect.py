@@ -5,12 +5,14 @@ This module scans the LANDING directory for new files, identifies their type
 using configured regex patterns, and registers them in the file_control table.
 """
 
+import hashlib
+import os
 import re
-import uuid
 from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
+import dotenv
 import pandas as pd
 
 from interchange.logs.logger import Logger
@@ -19,8 +21,7 @@ from interchange.persistence.file import FileStorage
 
 
 log = Logger(__name__)
-db = Database()
-fs = FileStorage()
+dotenv.load_dotenv()
 
 
 # =============================================================================
@@ -28,15 +29,11 @@ fs = FileStorage()
 # =============================================================================
 
 
-def scan_landing_files(
-    landing_layer: FileStorage.Layer,
-    client_id: str,
-) -> list[dict]:
+def scan_landing_files(client_id: str) -> list[dict]:
     """
     Scan landing directory for files belonging to a client.
     
     Args:
-        landing_layer: Landing storage layer
         client_id: Client identifier
         
     Returns:
@@ -48,8 +45,10 @@ def scan_landing_files(
     """
     log.logger.info(f"Scanning landing directory for client {client_id}")
     
-    # Get landing directory path for client
-    landing_path = fs._get_path(landing_layer, client_id, "")
+    # Construct landing directory path
+    # Structure: {basepath}/landing/{client_id}/
+    basepath = os.environ["ITX_DATALAKE_PATH"]
+    landing_path = Path(basepath) / "landing" / client_id
     
     if not landing_path.exists():
         log.logger.warning(f"Landing directory does not exist: {landing_path}")
@@ -90,12 +89,24 @@ def get_file_format_configs(client_id: str) -> pd.DataFrame:
     """
     log.logger.info(f"Loading file format configurations for client {client_id}")
     
-    # Query file_format table (or whatever your table name is)
-    configs = db.read_records(
-        table_name="file_format",  # Adjust table name if different
+    db = Database()
+    
+    # Query file_format table - get ALL and client-specific
+    all_configs = db.read_records(
+        table_name="file_format",
         fields=["brand", "customer_code", "file_type", "file_format"],
-        where={"customer_code": ["ALL", client_id]},  # Get ALL and client-specific
+        where={},  # Get all records
     )
+    
+    if all_configs.empty:
+        log.logger.warning("No file format configurations found in database")
+        return all_configs
+    
+    # Filter for this client (ALL or specific customer_code)
+    configs = all_configs[
+        (all_configs["customer_code"] == "ALL") | 
+        (all_configs["customer_code"] == client_id)
+    ].copy()
     
     if configs.empty:
         log.logger.warning(f"No file format configurations found for client {client_id}")
@@ -107,7 +118,7 @@ def get_file_format_configs(client_id: str) -> pd.DataFrame:
     )
     
     # Sort by priority descending (try specific first, then ALL)
-    configs = configs.sort_values("priority", ascending=False)
+    configs = configs.sort_values("priority", ascending=False).reset_index(drop=True)
     
     log.logger.info(f"Loaded {len(configs)} file format configuration(s)")
     return configs
@@ -204,6 +215,9 @@ def register_file_in_control(
     """
     Register a file in the file_control table.
     
+    Uses MD5 hash to generate file_id based on client_id, file_name, and date.
+    This ensures the same file always gets the same ID (deterministic).
+    
     Args:
         client_id: Client identifier
         file_name: Name of the file
@@ -211,12 +225,25 @@ def register_file_in_control(
         file_date: File processing date (if None, uses current date)
         
     Returns:
-        file_id: Generated UUID for the file
+        file_id: MD5 hash (32 hex characters) of the file
     """
-    file_id = str(uuid.uuid4()).replace("-", "").upper()
-    
     if file_date is None:
         file_date = date.today()
+    
+    # Generate MD5 hash as file_id (deterministic)
+    # Based on: client_id + file_name + date
+    hash_input = f"{client_id}{file_name}{file_date}"
+    file_id = hashlib.md5(hash_input.encode()).hexdigest().upper()
+    
+    # Determine brand_id (first 2 chars of brand)
+    # VISA -> VI, MASTERCARD -> MC
+    brand = file_type_info["brand"]
+    if brand == "VISA":
+        brand_id = "VI"
+    elif brand == "MASTERCARD":
+        brand_id = "MC"
+    else:
+        brand_id = brand[:2].upper()
     
     # Determine file_type code (IN/OUT)
     if "Incoming" in file_type_info["file_type"]:
@@ -226,25 +253,36 @@ def register_file_in_control(
     else:
         file_type_code = "UNKNOWN"
     
-    # Prepare record for insertion
-    file_record = {
-        "file_id": file_id,
-        "client_id": client_id,
-        "brand_id": file_type_info["brand"],
-        "file_type": file_type_code,
-        "file_format": file_type_info["file_format"],
-        "file_name": file_name,
-        "file_processing_date": file_date,
-        "file_status": "PENDING",
-        "created_at": datetime.now(),
-    }
-    
     log.logger.info(f"Registering file in file_control: {file_id} | {file_name}")
     
+    # Prepare record for insertion using create_records format
+    # create_records(table_name, fields, values)
+    # values = list[list[str|int|float]]
+    db = Database()
+    
+    fields = [
+        "client_id",
+        "file_id",
+        "brand_id",
+        "file_type",
+        "landing_file_name",
+        "file_processing_date",
+    ]
+    
+    values = [[
+        client_id,
+        file_id,
+        brand_id,
+        file_type_code,
+        file_name,
+        str(file_date),  # Convert date to string
+    ]]
+    
     # Insert into database
-    db.write_records(
+    db.create_records(
         table_name="file_control",
-        data=pd.DataFrame([file_record]),
+        fields=fields,
+        values=values,
     )
     
     log.logger.info(f"File registered successfully: {file_id}")
@@ -265,10 +303,11 @@ def is_file_already_registered(
     Returns:
         True if file already exists in file_control, False otherwise
     """
+    db = Database()
     existing = db.read_records(
         table_name="file_control",
         fields=["file_id"],
-        where={"client_id": client_id, "file_name": file_name},
+        where={"client_id": client_id, "landing_file_name": file_name},
     )
     
     return not existing.empty
@@ -280,7 +319,6 @@ def is_file_already_registered(
 
 
 def detect_and_register_files(
-    landing_layer: FileStorage.Layer,
     client_id: str,
     skip_existing: bool = True,
 ) -> list[dict]:
@@ -289,14 +327,19 @@ def detect_and_register_files(
     
     This is the primary function to use for file ingestion.
     
+    File IDs are generated using MD5 hash of (client_id + file_name + date).
+    This ensures:
+    - Same file always gets same ID (deterministic)
+    - Automatic duplicate detection
+    - Idempotent processing (safe to run multiple times)
+    
     Args:
-        landing_layer: Landing storage layer
         client_id: Client identifier
         skip_existing: If True, skip files already registered in file_control
         
     Returns:
         List of dictionaries with registered file information:
-        - file_id: Generated UUID
+        - file_id: MD5 hash (32 hex characters)
         - file_name: Name of the file
         - brand: VISA, MASTERCARD, etc.
         - file_type: IN/OUT
@@ -310,7 +353,7 @@ def detect_and_register_files(
     results = []
     
     # Step 1: Scan landing directory
-    files = scan_landing_files(landing_layer, client_id)
+    files = scan_landing_files(client_id)
     
     if not files:
         log.logger.info("No files found in landing directory")
@@ -417,57 +460,90 @@ def get_pending_files(client_id: Optional[str] = None) -> pd.DataFrame:
     """
     Get list of files in PENDING status from file_control.
     
+    Note: Since file_control doesn't have a 'status' field in the schema shown,
+    we look for files that have been registered but not yet processed.
+    A file is considered pending if:
+    - control_status is NULL
+    - process_start_ts is NULL
+    
     Args:
         client_id: Optional client identifier. If None, returns all pending files.
         
     Returns:
         DataFrame with pending files
     """
-    where = {"file_status": "PENDING"}
-    if client_id:
-        where["client_id"] = client_id
+    db = Database()
     
-    pending = db.read_records(
-        table_name="file_control",
-        fields=[
-            "file_id",
-            "client_id",
-            "brand_id",
-            "file_type",
-            "file_name",
-            "file_processing_date",
-        ],
-        where=where,
-    )
+    # Read all records (we'll filter in pandas since SQLite doesn't support complex WHERE)
+    if client_id:
+        all_files = db.read_records(
+            table_name="file_control",
+            fields=[
+                "file_id",
+                "client_id",
+                "brand_id",
+                "file_type",
+                "landing_file_name",
+                "file_processing_date",
+                "control_status",
+                "process_start_ts",
+            ],
+            where={"client_id": client_id},
+        )
+    else:
+        all_files = db.read_records(
+            table_name="file_control",
+            fields=[
+                "file_id",
+                "client_id",
+                "brand_id",
+                "file_type",
+                "landing_file_name",
+                "file_processing_date",
+                "control_status",
+                "process_start_ts",
+            ],
+            where={},
+        )
+    
+    # Filter for pending: control_status is NULL/empty AND process_start_ts is NULL/empty
+    pending = all_files[
+        (all_files["control_status"].isna() | (all_files["control_status"] == "")) &
+        (all_files["process_start_ts"].isna() | (all_files["process_start_ts"] == ""))
+    ].copy()
     
     return pending
 
 
 def update_file_status(
     file_id: str,
-    new_status: str,
-    error_message: Optional[str] = None,
+    control_status: str,
+    process_start_ts: Optional[str] = None,
+    process_finish_ts: Optional[str] = None,
 ) -> None:
     """
-    Update file status in file_control table.
+    Update file processing status in file_control table.
     
     Args:
         file_id: File identifier
-        new_status: New status (e.g., "PROCESSING", "COMPLETED", "FAILED")
-        error_message: Optional error message if status is FAILED
+        control_status: New control status (e.g., "PROCESSING", "COMPLETED", "FAILED")
+        process_start_ts: Optional start timestamp
+        process_finish_ts: Optional finish timestamp
     """
-    update_data = {
-        "file_status": new_status,
-        "updated_at": datetime.now(),
-    }
+    db = Database()
     
-    if error_message:
-        update_data["error_message"] = error_message
+    updates = {"control_status": control_status}
+    
+    if process_start_ts:
+        updates["process_start_ts"] = process_start_ts
+    
+    if process_finish_ts:
+        updates["process_finish_ts"] = process_finish_ts
     
     db.update_records(
         table_name="file_control",
-        data=pd.DataFrame([update_data]),
+        updates=updates,
         where={"file_id": file_id},
     )
     
-    log.logger.info(f"Updated file status: {file_id} -> {new_status}")
+    log.logger.info(f"Updated file status: {file_id} -> {control_status}")
