@@ -103,7 +103,7 @@ def _parse_dates(date_series: pd.Series, date_format: str, file_date: str) -> pd
                 except (ValueError, IndexError):
                     return pd.NaT
 
-            result = date_series.apply(parse_yyyy_ddd)
+            result = date_series.apply(parse_yyyy_ddd) # type: ignore
         case _:
             raise NotImplementedError
     return result
@@ -242,9 +242,9 @@ def clean_vss_fields(
     target_layer: FileStorage.Layer,
     client_id: str,
     file_id: str,
-    vss_types: list[str] = None,
-    origin_subdir_template: str = None,
-    target_subdir_template: str = None,
+    vss_types: list[str] | None = None,
+    origin_subdir_template : str | None = None,
+    target_subdir_template : str | None = None,
 ) -> None:
     """
     Clean VSS field values from extracted settlement data.

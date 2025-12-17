@@ -1429,9 +1429,9 @@ def calculate_vss_fields(
     target_layer: FileStorage.Layer,
     client_id: str,
     file_id: str,
-    vss_types: list[str] = None,
-    origin_subdir_template: str = None,
-    target_subdir_template: str = None,
+    vss_types: list[str] | None = None,
+    origin_subdir_template: str | None = None,
+    target_subdir_template: str | None = None,
 ) -> None:
     """
     Calculate additional fields from clean VSS settlement data.
