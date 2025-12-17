@@ -115,8 +115,8 @@ def transform_vss_records(
     client_id: str,
     file_id: str,
     origin_subdir="",
-    vss_types: list[str] = None,
-    target_subdir_template: str = None,   
+    vss_types: list[str] | None = None,
+    target_subdir_template: str | None = None,   
 ) -> None:
     """
    Reorganize VSS settlement records into individual records of raw data.
@@ -183,7 +183,6 @@ def transform_vss_records(
 
             if len(vss_df_filtered) == 0:
                 log.logger.warning(f"No records found for VSS type {vss_type} in {client_id} file {file_id}")
-                continue
                 
             # Construct target subdir for this VSS type
             target_subdir = target_subdir_template.format(vss_type=vss_type)
@@ -200,12 +199,4 @@ def transform_vss_records(
             log.logger.error(f"Error processing VSS type {vss_type} from {client_id} file {file_id}: {e}")
             raise
 
-    # Filter for specific VSS type
-    # vss_df_filter = vss_df[
-    #     (vss_df["0"].str.slice(start=60, stop=63) == vss_type)
-    #     & (vss_df["0"].str.slice(start=63, stop=65) == "  ")
-    # ]
-    
-    # log.logger.info(f"Saving Raw VSS {vss_type} records from {client_id} file {file_id}")
-    # fs.write_parquet(vss_df_filter, target_layer, client_id, file_id, subdir=target_subdir)
 

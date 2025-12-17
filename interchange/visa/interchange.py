@@ -38,7 +38,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
     """
     db = Database()
     df = db.read_records(
-        table_name="visa_rules_2",
+        table_name="visa_rules",
         fields=[
             "region_country_code",
             "valid_from",
@@ -466,7 +466,7 @@ def _evaluate_interchange_fees(
         conditions = [
             str(cond_name)
             for cond_name in rule.index.to_list()
-            if cond_name not in conditions_to_skip and rule[cond_name] != ""
+            if cond_name not in conditions_to_skip and rule[cond_name] != "" # type: ignore
         ]
         for condition in conditions:
             next_batch = _apply_condition(condition, rule[condition], next_batch, rates)
