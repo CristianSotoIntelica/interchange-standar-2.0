@@ -851,6 +851,8 @@ class reversal_indicator(CalculatedField):
 class source_amount(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
+            case "draft":
+                return source["source_amount"]
             case "sms":
                 return source["draft_amount"]
             case _:
@@ -1238,7 +1240,7 @@ def calculate_baseii_fields(
             file_data,
             ardef_data,
         ).calculate(data, type_record="draft")
-        calculated_field.name = field.__name__
+        calculated_field.name = (field.__name__,)
         fields.append(calculated_field)
     calculated_df = pd.concat(fields, axis=1)
     log.logger.info(

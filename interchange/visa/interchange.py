@@ -148,6 +148,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                     "special_condition_indicator": "special_condition_indicator_merchant_draft_indicator",
                     "summary_commodity": "summary_commodity_code",
                     "transaction_amount": "source_amount",
+                    "transaction_amount_currency": "source_currency_code_alphabetic",
                     "transaction_code_qualifier": "draft_code_qualifier_0",
                     "transaction_code": "draft_code",
                     "type_purchase": "type_of_purchase",
@@ -166,7 +167,6 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                     "national_tax_indicator",
                     "prepaid_card_indicator",
                     "summary_commodity",
-                    "transaction_amount_currency",
                     "transaction_code_qualifier",
                     "type_purchase",
                 ],
@@ -201,6 +201,7 @@ def _get_visa_rule_definitions(file_date: date, type_record: str) -> pd.DataFram
                     "summary_commodity": "summary_commodity_code",
                     "surcharge_amount": "surcharge_amount_sms",
                     "transaction_amount": "source_amount",
+                    "transaction_amount_currency": "source_currency_code_alphabetic",
                     "transaction_code_qualifier": "draft_code_qualifier_0",
                     "transaction_code": "transaction_code_sms",
                     "usage_code": "usage_code_sms",
@@ -319,7 +320,11 @@ def _apply_condition_greater_less(
 
 
 def _apply_condition_amount_currency(
-    condition_name: str, string_range: str, batch: pd.DataFrame, rates: pd.DataFrame
+    condition_name: str,
+    string_range: str,
+    rule: pd.Series,
+    batch: pd.DataFrame,
+    rates: pd.DataFrame,
 ) -> pd.DataFrame:
     """
     Check currency amount conditions where a value falls in a specified range.
@@ -327,7 +332,8 @@ def _apply_condition_amount_currency(
     condition_target_fields = {
         "source_amount": "source_currency_code_alphabetic",
     }
-    target_currency, string_range = string_range.split(",", maxsplit=1)
+    target_currency = rule[condition_target_fields[condition_name]]
+    # target_currency, string_range = string_range.split(",", maxsplit=1)
     target_rates = rates[rates["currency_to"] == target_currency]
     filter = pd.merge(
         left=batch,
@@ -367,12 +373,16 @@ def _apply_condition_amount_currency(
 
 
 def _apply_condition(
-    condition_name: str, condition_value: str, batch: pd.DataFrame, rates: pd.DataFrame
+    condition_name: str,
+    rule: pd.Series,
+    batch: pd.DataFrame,
+    rates: pd.DataFrame,
 ) -> pd.DataFrame:
     """
     Clean, check and apply condition to a batch of transactions.
     """
     # If there is no condition, return the same batch of transactions.
+    condition_value = rule[condition_name]
     condition_value = condition_value.replace(" ", "").upper()
     if condition_value in ("", "NAN", "NONE"):
         return batch
@@ -401,7 +411,7 @@ def _apply_condition(
             )
         case name if name in column_group_amount_currency:
             result = _apply_condition_amount_currency(
-                condition_name, condition_value, batch, rates
+                condition_name, condition_value, rule, batch, rates
             )
         case _:
             result = _apply_condition_default(
@@ -443,6 +453,7 @@ def _evaluate_interchange_fees(
         "fee_fixed",
         "fee_min",
         "fee_cap",
+        "source_currency_code_alphabetic",
     ]
     update_columns = [
         "region_country_code",
@@ -459,7 +470,7 @@ def _evaluate_interchange_fees(
         next_batch = transactions[
             (transactions["interchange_intelica_id"] == -1)
             & (transactions["jurisdiction_assigned"] == rule["region_country_code"])
-        ]
+        ].copy()
         if next_batch.empty:
             continue
         # Step 2: Iterate through each condition in the rule and apply its condition.
@@ -469,7 +480,7 @@ def _evaluate_interchange_fees(
             if cond_name not in conditions_to_skip and rule[cond_name] != "" # type: ignore
         ]
         for condition in conditions:
-            next_batch = _apply_condition(condition, rule[condition], next_batch, rates)
+            next_batch = _apply_condition(condition, rule, next_batch, rates)
             if next_batch.empty:
                 break
         # Step 3: Update transaction table with batch results.

@@ -154,7 +154,6 @@ def _clean_field_values(
             result = pd.to_numeric(pre, errors="coerce").fillna(0) / (
                 10**float_decimals
             )
-
         case "date":
             date_format = definition["date_format"]
             if not date_format:
