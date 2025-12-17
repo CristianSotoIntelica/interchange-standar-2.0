@@ -82,6 +82,9 @@ def _parse_dates(date_series: pd.Series, date_format: str, file_date: str) -> pd
             pre.loc[pre > reference_date] = pre.loc[
                 pre > reference_date
             ] - pd.DateOffset(years=10)  # type: ignore
+            reference_date_ts = pd.Timestamp(reference_date)
+            mask = date_series == "0000"
+            pre.loc[mask] = reference_date_ts
             result = pre
         case "!YYYYDDD":  # 🆕 NUEVO CASO PARA TU FORMATO
             # Maneja formato YYYYDDD (año completo + día juliano)
@@ -99,7 +102,7 @@ def _parse_dates(date_series: pd.Series, date_format: str, file_date: str) -> pd
                     return datetime(year, 1, 1) + pd.Timedelta(days=day_of_year - 1)
                 except (ValueError, IndexError):
                     return pd.NaT
-            
+
             result = date_series.apply(parse_yyyy_ddd)
         case _:
             raise NotImplementedError
@@ -118,8 +121,8 @@ def _clean_field_values(
         case "str":
             result = field_series.str.strip().replace("", " ")
         case "int":
-            pre = field_series.str.strip()
-            result = pd.to_numeric(pre, errors="coerce").astype("Int64")
+            pre = field_series.fillna("0").str.strip()
+            result = pd.to_numeric(pre, errors="coerce").fillna(0).astype("Int64")
         case "float":
             mapping = {
                 "}": "0",
@@ -146,9 +149,11 @@ def _clean_field_values(
             float_decimals = definition["float_decimals"]
             if not float_decimals > 0:
                 raise ValueError
-            field_series = field_series.replace(mapping, regex=True)
+            field_series = field_series.fillna("0").replace(mapping, regex=True)
             pre = field_series.str.strip()
-            result = pd.to_numeric(pre, errors="coerce") / (10**float_decimals)
+            result = pd.to_numeric(pre, errors="coerce").fillna(0) / (
+                10**float_decimals
+            )
         case "date":
             date_format = definition["date_format"]
             if not date_format:
@@ -244,7 +249,7 @@ def clean_vss_fields(
     """
     Clean VSS field values from extracted settlement data.
     Processes all VSS variants (110, 120, 130, 140) by default.
-    
+
     Args:
         origin_layer: Source storage layer
         target_layer: Destination storage layer
@@ -258,42 +263,50 @@ def clean_vss_fields(
     """
     if vss_types is None:
         vss_types = ["110", "120", "130", "140"]
-    
+
     # Default templates if not provided
     if origin_subdir_template is None:
         origin_subdir_template = "200-BASEII_EXT_VSS_{vss_type}"
     if target_subdir_template is None:
         target_subdir_template = "300-BASEII_CLN_VSS_{vss_type}"
-    
+
     log.logger.info(f"Retrieving file processing date for {client_id} file {file_id}")
     file_date = _retrieve_file_date(client_id, file_id)
-    
+
     log.logger.info(f"Cleaning fields for VSS variants: {', '.join(vss_types)}")
-    
+
     for vss_type in vss_types:
         try:
             type_record = f"vss_{vss_type}"
             origin_subdir = origin_subdir_template.format(vss_type=vss_type)
             target_subdir = target_subdir_template.format(vss_type=vss_type)
-            
+
             log.logger.info(f"Loading Visa {type_record} field definitions")
             field_defs = _load_visa_field_definitions(type_record, sort_by=[])
-            log.logger.info(f"Reading extracted VSS {vss_type} records from {client_id} file {file_id}")
+            log.logger.info(
+                f"Reading extracted VSS {vss_type} records from {client_id} file {file_id}"
+            )
             data = fs.read_parquet(
                 origin_layer,
                 client_id,
                 file_id,
                 subdir=origin_subdir,
             )
-            log.logger.info(f"Cleaning extracted VSS {vss_type} records from {client_id} file {file_id}")
+            log.logger.info(
+                f"Cleaning extracted VSS {vss_type} records from {client_id} file {file_id}"
+            )
             fields = []
             for _, field_series in data.items():
                 clean_field = _clean_field_values(field_series, field_defs, file_date)
                 fields.append(clean_field)
             clean_df = pd.concat(fields, axis=1)
-            log.logger.info(f"Saving Visa VSS {vss_type} clean fields from {client_id} file {file_id}")
-            fs.write_parquet(clean_df, target_layer, client_id, file_id, subdir=target_subdir)
-            
+            log.logger.info(
+                f"Saving Visa VSS {vss_type} clean fields from {client_id} file {file_id}"
+            )
+            fs.write_parquet(
+                clean_df, target_layer, client_id, file_id, subdir=target_subdir
+            )
+
         except Exception as e:
             log.logger.error(f"Error cleaning VSS {vss_type}: {str(e)}")
             raise

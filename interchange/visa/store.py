@@ -86,7 +86,7 @@ def store_sms_file(
         subdir=interchange_subdir,
     )
     log.logger.info(f"Merging full SMS data from {client_id} file {file_id}")
-    merged_data = transactions.join(calculated, how="left", lsuffix="_baseii")
+    merged_data = transactions.join(calculated, how="left", lsuffix="_sms")
     merged_data = merged_data.join(interchange, how="left", rsuffix="_intelica")
     log.logger.info(f"Saving full SMS for {client_id} file {file_id}")
     fs.write_parquet(
