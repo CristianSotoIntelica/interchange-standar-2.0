@@ -333,15 +333,16 @@ def _apply_condition_amount_currency(
         "source_amount": "source_currency_code_alphabetic",
     }
     target_currency = rule[condition_target_fields[condition_name]]
-    # target_currency, string_range = string_range.split(",", maxsplit=1)
     target_rates = rates[rates["currency_to"] == target_currency]
-    filter = pd.merge(
-        left=batch,
-        right=target_rates[["currency_from", "exchange_value"]],
-        how="left",
-        left_on=condition_target_fields[condition_name],
-        right_on="currency_from",
+    batch = batch.copy()
+
+    filter = batch.join(
+        target_rates[["currency_from", "exchange_value"]]
+        .drop_duplicates(subset=["currency_from"])
+        .set_index("currency_from"),
+        on=condition_target_fields[condition_name],
     )
+
     filter.loc[
         filter[condition_target_fields[condition_name]] == target_currency,
         "exchange_value",
@@ -386,6 +387,7 @@ def _apply_condition(
     condition_value = condition_value.replace(" ", "").upper()
     if condition_value in ("", "NAN", "NONE"):
         return batch
+    batch = batch.copy()
     # Otherwise, evaluate the condition.
     column_group_greater_less = [
         "surcharge_amount",
@@ -477,7 +479,7 @@ def _evaluate_interchange_fees(
         conditions = [
             str(cond_name)
             for cond_name in rule.index.to_list()
-            if cond_name not in conditions_to_skip and rule[cond_name] != "" # type: ignore
+            if cond_name not in conditions_to_skip and rule[cond_name] != ""  # type: ignore
         ]
         for condition in conditions:
             next_batch = _apply_condition(condition, rule, next_batch, rates)

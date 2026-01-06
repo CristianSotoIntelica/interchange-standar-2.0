@@ -930,9 +930,6 @@ class timeliness(CalculatedField):
     def calculate(self, source: pd.DataFrame, type_record: str) -> pd.Series:
         match type_record:
             case "draft":
-                # return (
-                #     source["central_processing_date"] - source["purchase_date"]
-                # ).dt.days
                 central_date = pd.to_datetime(source["central_processing_date"])
                 purchase_date = pd.to_datetime(source["purchase_date"])
 
@@ -1240,7 +1237,7 @@ def calculate_baseii_fields(
             file_data,
             ardef_data,
         ).calculate(data, type_record="draft")
-        calculated_field.name = (field.__name__,)
+        calculated_field.name = field.__name__
         fields.append(calculated_field)
     calculated_df = pd.concat(fields, axis=1)
     log.logger.info(
