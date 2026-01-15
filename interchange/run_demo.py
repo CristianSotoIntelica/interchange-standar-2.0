@@ -2,10 +2,14 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from interchange.persistence.file import FileStorage
 from interchange.visa import transform, extract, clean, calculate, interchange, store
+from interchange.mastercard import interpreter
+from pathlib import Path
 import gc
 import time  # <-- añadimos time
 
 layer = FileStorage.Layer
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Diccionario global para almacenar tiempos
 
@@ -116,14 +120,27 @@ def pipeline_visa_vss(client_id, file_id):
     timed(store.store_vss_file, layer.STAGING, layer.OPERATIONAL, client_id, file_id)
     gc.collect()
 
+def pipeline_mc_interpreter(client_id: str, file_id: str):
+    test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "DEMO" / "MasterCard_Inward_Settlement_to_SBSA_T112_20260113.TXT"
+
+    timed(
+        interpreter.interpretate_msg,
+        layer.LANDING,
+        layer.LANDING,
+        client_id,
+        file_id,
+        test_path=str(test_path),   #keyword para que no se vaya a origin_subdir
+    )
 
 if __name__ == "__main__":
     client_id = "EBGR"
     file_id = "CD976168BF6706C7FE71916C1A38DF2D"
 
-    pipeline_visa_baseii(client_id, file_id)
-    pipeline_visa_sms(client_id, file_id)
-    pipeline_visa_vss(client_id, file_id)
-    print("\n--- Tiempos de ejecución por función ---")
+    #pipeline_visa_baseii(client_id, file_id)
+    #pipeline_visa_sms(client_id, file_id)
+    #pipeline_visa_vss(client_id, file_id)
+    pipeline_mc_interpreter(client_id,file_id)
+    #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():
         print(f"{func_name}: {t:.2f} s")
+

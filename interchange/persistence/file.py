@@ -3,10 +3,11 @@ from enum import StrEnum, auto
 
 import dotenv
 import pandas as pd
+from typing import BinaryIO
+import io
 
 from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
-
 
 log = Logger(__name__)
 
@@ -99,8 +100,26 @@ class FileStorage:
     def write_plaintext(self) -> None:
         raise NotImplementedError
 
-    def read_binary(self) -> None:
-        raise NotImplementedError
+    def read_binary(
+        self, layer: Layer, client_id: str, file_id: str, subdir: str = "", 
+        in_memory: bool = True, test_path: str = "") -> BinaryIO:
+        try:
+            log.logger.debug(f"Searching for {client_id} file {file_id}")
+            #filepath = self._get_file_path(layer, client_id, file_id, subdir)
+            filepath = test_path
+            f = open(filepath, "rb")
+
+            if not in_memory:
+                return f #Debe cerrarse por la funcion que llamó el read_binary
+            
+            data  = f.read()
+            f.close()
+            stream_file = io.BytesIO(data)
+            return stream_file
+
+        except OSError as e:
+            log.logger.error(f"Error opening {client_id} file {file_id}: '{e}'")
+            raise
 
     def write_binary(self) -> None:
         raise NotImplementedError
