@@ -7,17 +7,23 @@ from typing import BinaryIO
 from interchange.mastercard.utils.unblock import unblock_1014
 from interchange.mastercard.utils.detect_mti import detect_mti
 from interchange.mastercard.utils.split_mti import split_mti_bitmap_body
-
-
 import io
+
+########################################################################################
+#DEBUG
+from pathlib import Path
+from datetime import datetime
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+PATH_LOG = PROJECT_ROOT / "log_test"
+########################################################################################
 
 log = Logger(__name__)
 fs = FileStorage()
 
-
 MTIS = {"1240", "1442", "1644", "1740"}
 
-def _load_as_ctf(
+def _load_as_binary(
     layer: FileStorage.Layer, client_id: str, file_id: str, subdir="", 
     test_path: str = "") -> BinaryIO:
 
@@ -94,18 +100,31 @@ def split_stream_to_df_simple(stream_file: io.BytesIO) -> pd.DataFrame:
 def interpretate_msg(
     origin_layer: FileStorage.Layer, target_layer: FileStorage.Layer, client_id: str, 
     file_id: str, origin_subdir="", target_sub_dir="", test_path: str = "") -> None:
-
-    valid_block_seps = (b"", b"\x20\x20", b"\x40\x40") # TODO: Deberia ser parametrizable en la BD
-    payload_size = 1012 # TODO: Deberia ser parametrizable en la BD
-    sep_size = 2 # TODO: Deberia ser parametrizable en la BD
+    
     encoding = "latin1" # TODO: Validar si se usara
 
-    stream_file = _load_as_ctf(origin_layer, client_id, file_id, 
+    stream_file = _load_as_binary(origin_layer, client_id, file_id, 
                                subdir=origin_subdir, test_path= test_path)
 
     unblocked_bytes = unblock_1014(
-        stream_file=stream_file, payload_size=payload_size, sep_size=sep_size, 
-        valid_seps=valid_block_seps) # Se podria parametrizar 
+        stream_file=stream_file) # Se podria parametrizar 
+    
+    ####################################################################################
+    # DEBUG
+    debug_dir = PATH_LOG
+
+    if test_path:
+        input_name = Path(test_path).name
+    else:
+        input = f"{client_id}_{file_id}"
+    
+    run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    debug_file = debug_dir / f"log_{run_ts}_{input_name}_unblocked.txt"
+
+    with open(debug_file, "wb") as f:
+        f.write(unblocked_bytes)
+    ####################################################################################
 
     stream_file = io.BytesIO(unblocked_bytes)
     
@@ -125,7 +144,7 @@ def interpretate_msg(
     df_1644 = dfs_by_mti["1644"]
     df_1740 = dfs_by_mti["1740"]
 
-    print(df_1644.head())
+    print(df_min.head())
 
 
     # Aca ya tenemos el archivo binario sin bloqueantes
