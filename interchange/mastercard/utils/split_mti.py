@@ -21,11 +21,9 @@ def split_mti_bitmap_body(payload: bytes):
       - mti_bytes (4)
       - bitmap_bytes (8 o 16)
       - body_bytes (resto)
-      - fields_present (lista)
-      - has_secondary (bool)
 
     Asume que payload empieza con MTI (4 bytes) seguido por bitmap (8 bytes).
-    Si el bit 1 del bitmap primario está encendido, agrega bitmap secundario (8 bytes).
+    Si el bit 1 del bitmap primario , hay bitmap secundario (8 bytes).
     """
     if len(payload) < 12:  # 4 MTI + 8 bitmap mínimo
         return None
