@@ -122,7 +122,7 @@ def pipeline_visa_vss(client_id, file_id):
 
 def pipeline_mc_interpreter(client_id: str, file_id: str):
     # Standard Bank
-    #test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "DEMO" / "MasterCard_Inward_Settlement_to_SBSA_T112_20260113.TXT"
+    test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "DEMO" / "MasterCard_Inward_Settlement_to_SBSA_T112_20260113.TXT"
     ####################################################################################
     # BRDRO
     # BRDRO INCOMING
@@ -176,7 +176,7 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
     # # NCBJM OUTGOING
     # test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "NCBJM" / "R06_CLNCBJ_JM_INTERNATIONALTRXNS_031795O_20250716_20250716_225832"
     # test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "NCBJM" / "R06_CLNCBJ_JM_JMDINTERNATIONALTRXNS_031796O_20250716_20250716_230003"
-    test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "NCBJM" / "R06_CLNCBJ_JM_LOCALTRXNS_031792O_20250716_20250716_225706"
+    #test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "NCBJM" / "R06_CLNCBJ_JM_LOCALTRXNS_031792O_20250716_20250716_225706"
     # ####################################################################################
 
     timed(

@@ -11,6 +11,7 @@ from typing import BinaryIO, Optional
 from interchange.mastercard.utils.unblock import unblock_1014
 from interchange.mastercard.utils.detect_mti import detect_mti
 from interchange.mastercard.utils.split_mti import split_mti_bitmap_body
+from interchange.mastercard.utils.classified_block_mti import classified_block_mti
 import io
 
 ########################################################################################
@@ -22,6 +23,9 @@ from interchange.mastercard.utils.dataelements import Parameters
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 PATH_LOG = PROJECT_ROOT / "log_test"
+
+PATH_PERSISTENCE = Path(__file__).resolve().parent.parent / "persistence"
+PATH_STAGING = PATH_PERSISTENCE / "files" / "staging" / "SBSA" 
 ########################################################################################
 
 log = Logger(__name__)
@@ -258,30 +262,25 @@ def interpretate_msg(
 
     debug_file = debug_dir / f"log_{run_ts}_{input_name}_unblocked.txt"
 
-    with open(debug_file, "wb") as f:
-        f.write(unblocked_bytes)
+    # with open(debug_file, "wb") as f:
+    #     f.write(unblocked_bytes)
     ####################################################################################
 
-    stream_file = io.BytesIO(unblocked_bytes)
+    # stream_file = io.BytesIO(unblocked_bytes)
     
     df = split_stream_to_df_simple(stream_file)
     df = add_block_column(df)
     
-    dfs_by_mti = {}
+    classified_block_mti(df, PATH_STAGING)
 
-    for mti in MTIS:
-        dfs_by_mti[mti] = (
-            df_min[df_min["mti"] == mti]
-            .reset_index(drop=True)
-        )
-
-    df_1240 = dfs_by_mti["1240"]
-    df_1442 = dfs_by_mti["1442"]
-    df_1644 = dfs_by_mti["1644"]
-    df_1740 = dfs_by_mti["1740"]
-
-    print(df_min.head())
-    #write_df_csv(df, out_dir="out", filename="dataset_full.csv")
 
     
-
+    ####################################################################################
+    # DEBUG
+    print(df.head())
+    print("FIN")
+    print(df.tail())
+    #write_df_csv(df, out_dir="out", filename="dataset_full.csv")
+    ####################################################################################
+    
+    
