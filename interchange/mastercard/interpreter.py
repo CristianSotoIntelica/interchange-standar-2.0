@@ -151,10 +151,10 @@ def build_message_row(row: pd.Series) -> dict:
             numeric_des=NUMERIC_DES,
         )
 
-        if de == 22 and info:
-            print("enc:", row.get("enc"),
-            "raw_hex:", info["raw"].hex(),
-            "text:", info.get("text"))
+        # if de == 22 and info:
+        #     print("enc:", row.get("enc"),
+        #     "raw_hex:", info["raw"].hex(),
+        #     "text:", info.get("text"))
         if not info:
             base[f"de_{de}"] = None
             continue
