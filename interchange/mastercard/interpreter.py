@@ -11,14 +11,25 @@ from typing import BinaryIO, Optional
 from interchange.mastercard.utils.unblock import unblock_1014
 from interchange.mastercard.utils.detect_mti import detect_mti
 from interchange.mastercard.utils.split_mti import split_mti_bitmap_body
+from interchange.mastercard.utils.classified_block_mti import classified_block_mti
+import io
+
+########################################################################################
+#DEBUG
+from pathlib import Path
+from datetime import datetime
 from interchange.mastercard.utils.decode_digits import decode_digits
 from interchange.mastercard.utils.dataelements import Parameters
 
-import io
+PROJECT_ROOT = Path(__file__).resolve().parent
+PATH_LOG = PROJECT_ROOT / "log_test"
+
+PATH_PERSISTENCE = Path(__file__).resolve().parent.parent / "persistence"
+PATH_STAGING = PATH_PERSISTENCE / "files" / "staging" / "SBSA" 
+########################################################################################
 
 log = Logger(__name__)
 fs = FileStorage()
-
 
 MTIS = {"1240", "1442", "1644", "1740"}
 
@@ -65,7 +76,7 @@ def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-def _load_as_ctf(
+def _load_as_binary(
     layer: FileStorage.Layer, client_id: str, file_id: str, subdir="", 
     test_path: str = "") -> BinaryIO:
 
@@ -232,7 +243,7 @@ def interpretate_msg(
     sep_size = 2 # TODO: Deberia ser parametrizable en la BD
     encoding = "latin1" # TODO: Validar si se usara
 
-    stream_file = _load_as_ctf(origin_layer, client_id, file_id, 
+    stream_file = _load_as_binary(origin_layer, client_id, file_id, 
                                subdir=origin_subdir, test_path= test_path)
 
     #unblocked_bytes = unblock_1014(
@@ -240,12 +251,43 @@ def interpretate_msg(
     #    valid_seps=valid_block_seps) # Se podria parametrizar 
 
     #stream_file = io.BytesIO(unblocked_bytes)
+    unblocked_bytes = unblock_1014(
+        stream_file=stream_file) # Se podria parametrizar 
+    
+    ####################################################################################
+    # DEBUG
+    debug_dir = PATH_LOG
+
+    if test_path:
+        input_name = Path(test_path).name
+    else:
+        input = f"{client_id}_{file_id}"
+    
+    run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    debug_file = debug_dir / f"log_{run_ts}_{input_name}_unblocked.txt"
+
+    # with open(debug_file, "wb") as f:
+    #     f.write(unblocked_bytes)
+    ####################################################################################
+
+    # stream_file = io.BytesIO(unblocked_bytes)
     
     df = split_stream_to_df_simple(stream_file)
     df = add_block_column(df)
     
     #print(df.iloc[0:20])
     write_df_csv(df, out_dir="out", filename="dataset_full.csv")
+    classified_block_mti(df, PATH_STAGING)
+
 
     
-
+    ####################################################################################
+    # DEBUG
+    print(df.head())
+    print("FIN")
+    print(df.tail())
+    #write_df_csv(df, out_dir="out", filename="dataset_full.csv")
+    ####################################################################################
+    
+    
