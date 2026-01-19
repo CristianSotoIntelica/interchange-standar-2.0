@@ -1,6 +1,7 @@
 import pandas as pd 
 from pathlib import Path
 import numpy as np
+import binascii
 
 import io
 from enum import Enum
@@ -11,7 +12,9 @@ from typing import BinaryIO, Optional
 from interchange.mastercard.utils.unblock import unblock_1014
 from interchange.mastercard.utils.detect_mti import detect_mti
 from interchange.mastercard.utils.split_mti import split_mti_bitmap_body
+from interchange.mastercard.utils.split_mti import bitmap_bits
 from interchange.mastercard.utils.classified_block_mti import classified_block_mti
+from interchange.mastercard.utils.split_dataelements import extract_one_de_from_body, decode_text_ebcdic
 import io
 
 ########################################################################################
@@ -35,6 +38,12 @@ MTIS = {"1240", "1442", "1644", "1740"}
 
 # Spec de Data Elements (fixed / variable) para parsear el body
 DE_SPEC = Parameters().getdataelements()
+
+NUMERIC_DES = {
+    2,3,4,5,6,9,10,12,14,23,24,25,26,30,37,38,49,50,51,71,73,93,94,95,100
+}
+
+BINARY_DES = {55}  # EMV ICC -> binario
 
 class FunctionRole(Enum):
     HEADER = "HEADER"
@@ -85,53 +94,91 @@ def _load_as_binary(
 
     return stream_file
 
-def extract_de24(body: bytes, fields: list[int], enc: str) -> Optional[str]:
-    """
-    Extrae DE24 consumiendo SOLO los DE presentes <= 24 (según fields).
-    """
-    if not body or not fields:
-        return None
+def extract_de24(body: bytes, fields: list[int], enc: str) -> tuple[Optional[str], Optional[str]]:
+    de24 = extract_one_de_from_body(
+        body=body,
+        fields=fields,
+        enc=enc,
+        de_spec=DE_SPEC,
+        target_de=24,
+        max_de=24,
+        numeric_des={24},
+    )
 
-    fields_le24 = [f for f in fields if 2 <= f <= 24]  # DE1 no está en el body
-    if 24 not in fields_le24:
-        return None
+    if not de24:
+        return None, None
 
-    pos = 0
+    return de24["text"], de24["raw_hex"]
 
-    # bitmap_bits() usualmente ya devuelve orden ascendente; si no, usa sorted(fields_le24)
-    for de in fields_le24:
-        cfg = DE_SPEC.get(de)
-        if cfg is None:
-            return None  # no sabemos avanzar seguro
 
-        if cfg["fixed"]:
-            ln = int(cfg["length"])
-            if pos + ln > len(body):
-                return None
-            raw = body[pos : pos + ln]
-            pos += ln
+def build_message_row(row: pd.Series) -> dict:
+    base = {
+        "msg_no": row["msg_no"],
+        "block": row.get("block"),
+        "offset": row.get("offset"),
+        "msg_len": row.get("msg_len"),
+        "mti": row.get("mti"),
+        "enc": row.get("enc"),
+        "function_code": row.get("function_code"),
+        "function_role": row.get("function_role"),
+        "parse_ok": row.get("parse_ok"),
+    }
+
+    if not row.get("parse_ok"):
+        return base
+
+    body_hex = row.get("body_hex")
+    bitmap_hex = row.get("bitmap_hex")
+
+    if not isinstance(body_hex, str) or not isinstance(bitmap_hex, str):
+        return base
+
+    body = bytes.fromhex(body_hex)
+    bitmap = bytes.fromhex(bitmap_hex)
+
+    fields = bitmap_bits(bitmap)
+
+    WANTED_DES = sorted(DE_SPEC.keys())
+
+    for de in WANTED_DES:
+        info = extract_one_de_from_body(
+            body=body,
+            fields=fields,
+            enc=row.get("enc"),
+            de_spec=DE_SPEC,
+            target_de=de,
+            max_de=128,
+            numeric_des=NUMERIC_DES,
+        )
+
+        if de == 22 and info:
+            print("enc:", row.get("enc"),
+            "raw_hex:", info["raw"].hex(),
+            "text:", info.get("text"))
+        if not info:
+            base[f"de_{de}"] = None
+            continue
+
+        # BINARIOS (ej: DE55 - EMV)
+        if de in BINARY_DES:
+            base[f"de_{de}"] = binascii.b2a_hex(info["raw"]).decode("ascii")
+
+        # TEXTO EBCDIC (ej: DE43)
+        elif de == 43:
+            base[f"de_{de}"] = decode_text_ebcdic(info["raw"])
         else:
-            len_digits = int(cfg["length"])  # 2=LLVAR, 3=LLLVAR
-            if pos + len_digits > len(body):
-                return None
+            base[f"de_{de}"] = info.get("text")
 
-            raw_len = body[pos : pos + len_digits]
-            pos += len_digits
+    return base
 
-            len_str = decode_digits(raw_len, enc).strip()
-            if not len_str.isdigit():
-                return None
-            ln = int(len_str)
 
-            if pos + ln > len(body):
-                return None
-            raw = body[pos : pos + ln]
-            pos += ln
+def build_wide_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for _, r in df.iterrows():
+        rows.append(build_message_row(r))
 
-        if de == 24:
-            return decode_digits(raw, enc).strip(), raw.hex()
+    return pd.DataFrame(rows)
 
-    return None
 
 def function_role_from_1644(mti: str, function_code: Optional[str]) -> Optional[str]:
     """
@@ -243,50 +290,45 @@ def interpretate_msg(
     sep_size = 2 # TODO: Deberia ser parametrizable en la BD
     encoding = "latin1" # TODO: Validar si se usara
 
-    stream_file = _load_as_binary(origin_layer, client_id, file_id, 
-                               subdir=origin_subdir, test_path= test_path)
+    stream_file = _load_as_binary(origin_layer, client_id, file_id, subdir=origin_subdir, test_path= test_path)
 
-    #unblocked_bytes = unblock_1014(
-    #    stream_file=stream_file, payload_size=payload_size, sep_size=sep_size, 
-    #    valid_seps=valid_block_seps) # Se podria parametrizar 
-
-    #stream_file = io.BytesIO(unblocked_bytes)
-    unblocked_bytes = unblock_1014(
-        stream_file=stream_file) # Se podria parametrizar 
+    unblocked_bytes = unblock_1014(stream_file=stream_file, payload_size=payload_size, sep_size=sep_size,  valid_seps=valid_block_seps) # Se podria parametrizar 
     
     ####################################################################################
     # DEBUG
-    debug_dir = PATH_LOG
+    # debug_dir = PATH_LOG
 
-    if test_path:
-        input_name = Path(test_path).name
-    else:
-        input = f"{client_id}_{file_id}"
+    # if test_path:
+    #     input_name = Path(test_path).name
+    # else:
+    #     input = f"{client_id}_{file_id}"
     
-    run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    debug_file = debug_dir / f"log_{run_ts}_{input_name}_unblocked.txt"
+    # debug_file = debug_dir / f"log_{run_ts}_{input_name}_unblocked.txt"
 
     # with open(debug_file, "wb") as f:
     #     f.write(unblocked_bytes)
     ####################################################################################
 
-    # stream_file = io.BytesIO(unblocked_bytes)
+    stream_file = io.BytesIO(unblocked_bytes)
     
     df = split_stream_to_df_simple(stream_file)
     df = add_block_column(df)
-    
+    df_wide = build_wide_dataframe(df)
+
     #print(df.iloc[0:20])
-    write_df_csv(df, out_dir="out", filename="dataset_full.csv")
-    classified_block_mti(df, PATH_STAGING)
+    write_df_csv(df_wide, out_dir="out", filename="dataset_full.csv")
+   
+    #classified_block_mti(df, PATH_STAGING)
 
 
     
     ####################################################################################
     # DEBUG
-    print(df.head())
-    print("FIN")
-    print(df.tail())
+    # print(df.head())
+    # print("FIN")
+    # print(df.tail())
     #write_df_csv(df, out_dir="out", filename="dataset_full.csv")
     ####################################################################################
     

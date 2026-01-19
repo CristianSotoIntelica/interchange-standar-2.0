@@ -18,7 +18,5 @@ def unblock_1014(
 
         if sep not in valid_seps:
             stream_file.seek(stream_file.tell() - len(sep))
-        else:
-            print(sep)
 
     return bytes(out_bytes)
