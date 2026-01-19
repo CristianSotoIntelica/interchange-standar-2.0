@@ -235,16 +235,17 @@ def interpretate_msg(
     stream_file = _load_as_ctf(origin_layer, client_id, file_id, 
                                subdir=origin_subdir, test_path= test_path)
 
-    unblocked_bytes = unblock_1014(
-        stream_file=stream_file, payload_size=payload_size, sep_size=sep_size, 
-        valid_seps=valid_block_seps) # Se podria parametrizar 
+    #unblocked_bytes = unblock_1014(
+    #    stream_file=stream_file, payload_size=payload_size, sep_size=sep_size, 
+    #    valid_seps=valid_block_seps) # Se podria parametrizar 
 
-    stream_file = io.BytesIO(unblocked_bytes)
+    #stream_file = io.BytesIO(unblocked_bytes)
     
     df = split_stream_to_df_simple(stream_file)
     df = add_block_column(df)
     
-    #write_df_csv(df, out_dir="out", filename="dataset_full.csv")
+    #print(df.iloc[0:20])
+    write_df_csv(df, out_dir="out", filename="dataset_full.csv")
 
     
 

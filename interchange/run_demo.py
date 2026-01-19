@@ -121,7 +121,7 @@ def pipeline_visa_vss(client_id, file_id):
     gc.collect()
 
 def pipeline_mc_interpreter(client_id: str, file_id: str):
-    test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "DEMO" / "MCI.AR.R111.C.E0085850.D260108.T011121.A001"
+    test_path = PROJECT_ROOT / "persistence" / "files" / "landing" / "DEMO" / "MasterCard_Inward_Settlement_to_SBSA_T112_20260113.TXT"
 
     timed(
         interpreter.interpretate_msg,
