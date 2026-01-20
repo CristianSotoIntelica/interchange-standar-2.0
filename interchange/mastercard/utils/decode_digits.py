@@ -1,11 +1,6 @@
 import codecs
 from typing import Optional, Dict, Any, List, Tuple
 
-def hex_to_bytes(hex_str: str) -> bytes:
-    if not isinstance(hex_str, str) or not hex_str:
-        return b""
-    return bytes.fromhex(hex_str)
-
 def decode_digits(b: bytes, enc: str) -> str:
     """
     Convierte bytes que representan dígitos (ASCII o EBCDIC) a string.
