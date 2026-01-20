@@ -21,10 +21,16 @@ from datetime import datetime
 from interchange.mastercard.utils.decode_digits import decode_digits
 from interchange.mastercard.utils.dataelements import Parameters
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-PATH_LOG = PROJECT_ROOT / "log_test"
+print(Path(__file__).resolve())
 
-PATH_PERSISTENCE = Path(__file__).resolve().parent.parent / "persistence"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+print(PROJECT_ROOT)
+PATH_LOG = PROJECT_ROOT / "interchange" / "mastercard" / "log_test"
+
+print(PATH_LOG)
+
+PATH_PERSISTENCE = PROJECT_ROOT / "persistence"
 PATH_STAGING = PATH_PERSISTENCE / "files" / "staging" / "SBSA" 
 ########################################################################################
 
@@ -77,11 +83,11 @@ def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _load_as_binary(
-    layer: FileStorage.Layer, client_id: str, file_id: str, subdir="", 
-    test_path: str = "") -> BinaryIO:
+    layer: FileStorage.Layer, client_id: str, file_id: str, subdir="") -> BinaryIO:
 
     stream_file = fs.read_binary(
-        fs.Layer.LANDING, client_id, file_id, subdir, True, test_path)
+        layer=fs.Layer.LANDING, client_id=client_id, file_id=file_id, subdir=subdir, 
+        in_memory=True)
 
     return stream_file
 
@@ -230,7 +236,7 @@ def split_stream_to_df_simple(stream_file: io.BytesIO) -> pd.DataFrame:
 
 def interpretate_msg(
     origin_layer: FileStorage.Layer, target_layer: FileStorage.Layer, client_id: str, 
-    file_id: str, origin_subdir="", target_sub_dir="", test_path: str = "") -> None:
+    file_id: str, origin_subdir="", target_sub_dir="") -> None:
 
     """
     - Lee archivo binario
@@ -243,8 +249,8 @@ def interpretate_msg(
     sep_size = 2 # TODO: Deberia ser parametrizable en la BD
     encoding = "latin1" # TODO: Validar si se usara
 
-    stream_file = _load_as_binary(origin_layer, client_id, file_id, 
-                               subdir=origin_subdir, test_path= test_path)
+    stream_file = _load_as_binary(
+        layer=origin_layer, client_id=client_id, file_id=file_id, subdir=origin_subdir)
 
     unblocked_bytes = unblock_1014(
         stream_file=stream_file) # Se podria parametrizar 
@@ -252,26 +258,24 @@ def interpretate_msg(
     ####################################################################################
     # DEBUG
     debug_dir = PATH_LOG
-
-    if test_path:
-        input_name = Path(test_path).name
-    else:
-        input = f"{client_id}_{file_id}"
+    
+    input_name = f"{client_id}_{file_id}"
     
     run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     debug_file = debug_dir / f"log_{run_ts}_{input_name}_unblocked.txt"
 
-    # with open(debug_file, "wb") as f:
-    #     f.write(unblocked_bytes)
+    with open(debug_file, "wb") as f:
+        f.write(unblocked_bytes)
     ####################################################################################
 
-    # stream_file = io.BytesIO(unblocked_bytes)
+    stream_file = io.BytesIO(unblocked_bytes)
     
     df = split_stream_to_df_simple(stream_file)
     df = add_block_column(df)
     
-    classified_block_mti(df, PATH_STAGING)
+    classified_block_mti(
+        df_data=df, target_layer=target_layer, client_id=client_id, file_id=file_id)
 
 
     

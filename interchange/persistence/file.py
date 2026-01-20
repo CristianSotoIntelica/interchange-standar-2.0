@@ -8,6 +8,7 @@ import io
 
 from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
+from pathlib import Path
 
 log = Logger(__name__)
 
@@ -102,11 +103,10 @@ class FileStorage:
 
     def read_binary(
         self, layer: Layer, client_id: str, file_id: str, subdir: str = "", 
-        in_memory: bool = True, test_path: str = "") -> BinaryIO:
+        in_memory: bool = True) -> BinaryIO:
         try:
             log.logger.debug(f"Searching for {client_id} file {file_id}")
-            #filepath = self._get_file_path(layer, client_id, file_id, subdir)
-            filepath = test_path
+            filepath = self._get_file_path(layer, client_id, file_id, subdir)
             f = open(filepath, "rb")
 
             if not in_memory:
@@ -146,5 +146,25 @@ class FileStorage:
         """
         log.logger.debug(f"Writing {client_id} file {file_id} to parquet")
         filepath = f"{self._get_file_path(layer, client_id, file_id, subdir)}.parquet"
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        data.to_parquet(filepath, index=True)
+
+    def write_parquet_per_block(
+        self,
+        data: pd.DataFrame,
+        layer: Layer,
+        client_id: str,
+        file_id: str,
+        subdir: str = "",
+        name_block: str = ""
+    ) -> None:
+        """
+        Write the given dataframe to a parquet file. Overwrites file if exists.
+        """
+        log.logger.debug(f"Writing {client_id} file {file_id} to parquet")
+        filepath = f"{self._get_file_path(layer, client_id, file_id, subdir)}.parquet"
+        p = Path(filepath)
+        if name_block != "":
+            filepath = p.with_name(f"{p.stem}_{name_block}{p.suffix}")
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         data.to_parquet(filepath, index=True)
