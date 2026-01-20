@@ -74,6 +74,13 @@ class Database:
             fd: f"'{val}'" if isinstance(val, str) else str(val)
             for (fd, val) in values.items()
         }
+    
+    def _to_bool(self, val: object) -> bool:
+        if val is None:
+            return False
+        if isinstance(val, bool):
+            return val
+        return str(val).strip().lower() in ("true", "1", "y", "yes", "t")
 
     def create_table(self, table_name: str, fields_def: dict[str, str]) -> None:
         """
@@ -177,3 +184,32 @@ class Database:
             """
         log.logger.debug("Attempting to execute DELETE SQL statement")
         self._execute(sql_statement, commit_option=True)
+
+    def needs_unblock_for_file(self, client_id: str, file_id: str) -> bool:
+        # CONTROL FILE
+        df_cf = self.read_records(
+            table_name="file_control", fields=["file_type"], 
+            where={"client_id": client_id, "file_id": file_id})
+
+        if df_cf.empty:
+            return False
+        
+        file_type = df_cf.iloc[0]["file_type"].strip().upper()
+
+        # CLIENT
+        df_cl = self.read_records(
+            table_name="client", fields=["file_mc_block_in", "file_mc_block_out"], 
+            where={"client_id": client_id})
+        
+        if df_cl.empty:
+            return False
+        
+        if file_type == "IN":
+            return self._to_bool(df_cl.iloc[0]["file_mc_block_in"])
+        if file_type == "OUT":
+            return self._to_bool(df_cl.iloc[0]["file_mc_block_out"])
+        
+        return False
+    
+        
+        

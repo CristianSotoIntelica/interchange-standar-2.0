@@ -252,8 +252,15 @@ def interpretate_msg(
     stream_file = _load_as_binary(
         layer=origin_layer, client_id=client_id, file_id=file_id, subdir=origin_subdir)
 
-    unblocked_bytes = unblock_1014(
-        stream_file=stream_file) # Se podria parametrizar 
+
+    db = Database()
+    need_unblock = db.needs_unblock_for_file(client_id=client_id, file_id=file_id)
+
+    if need_unblock:
+        unblocked_bytes = unblock_1014(stream_file=stream_file)
+    else:
+        stream_file.seek(0)    
+        unblocked_bytes = stream_file.read()
     
     ####################################################################################
     # DEBUG
@@ -276,8 +283,6 @@ def interpretate_msg(
     
     classified_block_mti(
         df_data=df, target_layer=target_layer, client_id=client_id, file_id=file_id)
-
-
     
     ####################################################################################
     # DEBUG
