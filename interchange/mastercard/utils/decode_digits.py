@@ -1,3 +1,6 @@
+import codecs
+from typing import Optional, Dict, Any, List, Tuple
+
 def decode_digits(b: bytes, enc: str) -> str:
     """
     Convierte bytes que representan dígitos (ASCII o EBCDIC) a string.
@@ -11,6 +14,6 @@ def decode_digits(b: bytes, enc: str) -> str:
             if 0xF0 <= x <= 0xF9:
                 out.append(chr(ord("0") + (x - 0xF0)))
             else:
-                out.append(chr(x))  # fallback defensivo
+                 out.append("?")  # byte no esperado en EBCDIC_DIGITS
         return "".join(out)
     return b.decode("latin1", errors="ignore")
