@@ -131,11 +131,19 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
     )
 
 if __name__ == "__main__":
-    #client_id = "BRDRO"
-    #file_id = "ba4a9711221a6b137c56ceb064f54a01"
+    client_id = "BRDRO"
+    file_id = "ba4a9711221a6b137c56ceb064f54a01"
 
-    client_id = "SBSA"
-    file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+    # client_id = "SBSA"
+    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+
+    # client_id = "BTRLRO"
+    # file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
+    # file_id = "3bbe11a245223ecb2ebfb46b6d2c9f36" # incoming
+    # file_id = "927e539ab0e66cbcf48cd6043cac1d47" # outgoing (block)
+    # file_id = "28ef73ae78c526c130fccb618a581359" # outgoing (no block)
+    # file_id = "cda240036fbee87e93277789a703b8e5" # outgoing (no block)
+
     #pipeline_visa_baseii(client_id, file_id)
     #pipeline_visa_sms(client_id, file_id)
     #pipeline_visa_vss(client_id, file_id)

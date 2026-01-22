@@ -1,9 +1,9 @@
 import os
 import sqlite3
-
 import dotenv
-from pandas import DataFrame
+import re 
 
+from pandas import DataFrame
 from interchange.logs.logger import Logger
 
 
@@ -186,9 +186,9 @@ class Database:
         self._execute(sql_statement, commit_option=True)
 
     def needs_unblock_for_file(self, client_id: str, file_id: str) -> bool:
-        # CONTROL FILE
+        # Obtener file_type desde file_control
         df_cf = self.read_records(
-            table_name="file_control", fields=["file_type"], 
+            table_name="file_control", fields=["file_type", "brand_id", "landing_file_name"], 
             where={"client_id": client_id, "file_id": file_id})
 
         if df_cf.empty:
@@ -196,20 +196,26 @@ class Database:
         
         file_type = df_cf.iloc[0]["file_type"].strip().upper()
 
-        # CLIENT
-        df_cl = self.read_records(
-            table_name="client", fields=["file_mc_block_in", "file_mc_block_out"], 
-            where={"client_id": client_id})
+        brand_id = df_cf.iloc[0]["brand_id"].strip().upper()
+
+        landing_file_name = str(df_cf.iloc[0]["landing_file_name"] or "").strip()
+
+        # Consultar reglas por client_id + brand_id + file_type
+        df_rx = self.read_records(
+            table_name="file_name_regex_param", fields=["file_format", "file_block"], 
+            where={"client_id": client_id, "brand_id": brand_id, 
+                   "file_type": file_type})
         
-        if df_cl.empty:
-            return False
-        
-        if file_type == "IN":
-            return self._to_bool(df_cl.iloc[0]["file_mc_block_in"])
-        if file_type == "OUT":
-            return self._to_bool(df_cl.iloc[0]["file_mc_block_out"])
-        
+        # Si hay coincidencia, validar filename
+        if df_rx.empty:
+            return False 
+    
+        for _, row in df_rx.iterrows():
+            pattern = str(row["file_format"]).strip()
+            try:
+                if re.match(pattern=pattern, string=landing_file_name, flags=re.IGNORECASE):
+                    return self._to_bool(row["file_block"])
+            except re.error as e:
+                continue
         return False
     
-        
-        

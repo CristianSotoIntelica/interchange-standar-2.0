@@ -37,9 +37,28 @@ DE_SPEC = Parameters().getdataelements()
 
 def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    is_header = df["function_code"].eq("697") & df["mti"].eq("1644")
-    df["block"] = is_header.cumsum()
-    df.loc[df["block"].eq(0), "block"] = np.nan
+
+    is_header = (df["function_code"].astype(str) == "697") & (df["mti"] == "1644")
+    is_trailer = (df["function_code"].astype(str) == "695") & (df["mti"] == "1644")
+
+    block = []
+    current_block = 0
+    open_block = False
+
+    for h, t in zip(is_header, is_trailer):
+        if h:
+            current_block += 1
+            open_block = True
+            block.append(current_block)
+        elif open_block:
+            block.append(current_block)
+        else:
+            block.append(np.nan)
+
+        if t:
+            open_block = False  # ← cierre real del bloque
+
+    df["block"] = block
     return df
 
 def _load_as_binary(
