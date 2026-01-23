@@ -14,8 +14,10 @@ from interchange.mastercard.utils.dataelements import Parameters
 from interchange.mastercard.utils.message_reader import read_len_prefixed_messages
 from interchange.mastercard.utils.parse_format import build_wide_row
 from interchange.mastercard.utils.parse_format import extract_de24_fast
-from interchange.mastercard.utils.classified_block_mti import classified_block_mti_parts
-from interchange.mastercard.utils.classified_block_mti import compact_parquet_parts
+from interchange.mastercard.utils.classified_block_mti import write_parquet_by_mti_block_streaming
+from interchange.mastercard.utils.classified_block_mti import _canonical_schema_from_de_spec
+from interchange.mastercard.utils.classified_block_mti import finalize_writers
+
 
 print(Path(__file__).resolve())
 
@@ -105,9 +107,12 @@ def interpretate_msg(origin_layer, target_layer, client_id: str, file_id: str, o
     df = add_block_column(df)
 
     #5) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
-    BATCH_SIZE = 2000  
+    BATCH_SIZE = 5000
 
     records = df.to_dict("records")
+
+    schema = _canonical_schema_from_de_spec(DE_SPEC)
+    writers = {}  # key: (file_id, block, mti) -> ParquetWriter 
 
     for i in range(0, len(records), BATCH_SIZE):
         chunk = records[i : i + BATCH_SIZE]
@@ -129,12 +134,19 @@ def interpretate_msg(origin_layer, target_layer, client_id: str, file_id: str, o
         ])
 
         # escribe / clasifica este bloque por el chunk obtenido
-        classified_block_mti_parts(
-            df=df_wide_chunk, target_layer=target_layer, file_id=file_id, 
-            client_id=client_id,out_dir=PATH_STAGING, part_id=i // BATCH_SIZE)
+        write_parquet_by_mti_block_streaming(
+                df_wide_chunk,
+                fs=fs,
+                target_layer=target_layer,
+                client_id=client_id,
+                file_id=file_id,
+                schema=schema,
+                writers=writers,
+        )
 
         # libera memoria explícitamente
         del df_wide_chunk
 
+    finalize_writers(writers)
 
-    compact_parquet_parts(PATH_STAGING, de_spec=DE_SPEC)
+

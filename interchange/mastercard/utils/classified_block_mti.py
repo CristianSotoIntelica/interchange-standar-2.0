@@ -4,6 +4,8 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from typing import Dict, Tuple
+
 
 def _canonical_schema_from_de_spec(de_spec: dict) -> pa.Schema:
     # columnas base fijas
@@ -27,7 +29,7 @@ def _ensure_and_cast(table: pa.Table, schema: pa.Schema) -> pa.Table:
     if missing:
         nrows = table.num_rows
         for col in missing:
-            table = table.append_column(col, pa.nulls(nrows))
+            table = table.append_column(col, pa.nulls(nrows, type=schema.field(col).type))
 
     # reordenar y castear
     table = table.select(schema.names)
@@ -68,33 +70,71 @@ def classified_block_mti_parts(
                 data=g, layer=target_layer, client_id=client_id, file_id=file_id, 
                 subdir="100_IPM_1740_RAW", name_block=name_block)
 
+def subdir_for_mti(mti: str) -> str:
+    mti = str(mti)
+    if mti == "1240":
+        return "100_IPM_1240_RAW"
+    elif mti == "1442":
+        return "100_IPM_1442_RAW"
+    elif mti == "1644":
+        return "100_IPM_1644_RAW"
+    elif mti == "1740":
+        return "100_IPM_1740_RAW"
+    return "100_IPM_UNK_RAW"
 
-def compact_parquet_parts(root_dir, *, de_spec: dict):
-    """
-    Une part-*.parquet -> final.parquet por cada (block,mti),
-    usando schema canónico estable (sin mismatch).
-    """
-    root_dir = Path(root_dir)
-    schema = _canonical_schema_from_de_spec(de_spec)
+def _base_dir_for_subdir(fs, layer, client_id: str, file_id: str, subdir: str) -> Path:
+    base = Path(fs._get_file_path(layer, client_id, file_id, subdir=subdir))
+    return base.parent  
 
-    for mti_dir in root_dir.glob("block=*/mti=*"):
-        part_files = sorted(mti_dir.glob("part-*.parquet"))
-        if not part_files:
-            continue
+def write_parquet_by_mti_block_streaming(
+    df_chunk: pd.DataFrame,
+    *,
+    fs,
+    target_layer,
+    client_id: str,
+    file_id: str,
+    schema: pa.Schema,
+    writers: dict,
+) -> None:
 
-        final_path = mti_dir / "final.parquet"
-        writer = pq.ParquetWriter(final_path, schema, compression="snappy")
+    df_chunk = df_chunk[df_chunk["block"].notna()]
+    if df_chunk.empty:
+        return
 
-        try:
-            for p in part_files:
-                pf = pq.ParquetFile(p)
-                for batch in pf.iter_batches():
-                    table = pa.Table.from_batches([batch])
-                    table = _ensure_and_cast(table, schema)
-                    writer.write_table(table)
-        finally:
-            writer.close()
+    for (block, mti), g in df_chunk.groupby(["block", "mti"], sort=False):
+        block_i = int(block)
+        mti_s = str(mti)
 
-        # borra parts luego de compactar
-        for p in part_files:
-            p.unlink()
+        subdir = subdir_for_mti(mti_s)
+
+        base_dir = _base_dir_for_subdir(
+            fs, target_layer, client_id, file_id, subdir
+        )
+
+        out_dir = base_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"{file_id}_{block_i}_{mti_s}.parquet"
+        out_path = out_dir / filename
+
+        key = (file_id, block_i, mti_s)
+
+        table = pa.Table.from_pandas(g, preserve_index=False)
+        table = _ensure_and_cast(table, schema)
+
+        # writer único por archivo
+        if key not in writers:
+            writers[key] = pq.ParquetWriter(
+                out_path.as_posix(),
+                schema,
+                compression="snappy",
+                use_dictionary=True,
+            )
+
+        writers[key].write_table(table)
+
+
+def finalize_writers(writers: Dict[Tuple[str, int, str], pq.ParquetWriter]) -> None:
+    for w in writers.values():
+        w.close()
+    writers.clear()

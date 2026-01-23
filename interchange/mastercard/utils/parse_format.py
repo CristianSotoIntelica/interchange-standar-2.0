@@ -61,11 +61,11 @@ def decode_text_best(raw: bytes, enc: str) -> str:
     si el MTI fue EBCDIC_DIGITS, cp500.
     """
     if enc == "EBCDIC_DIGITS":
-        return raw.decode("cp500", errors="replace").strip()
+        return raw.decode("cp500", errors="replace")
     try:
-        return raw.decode("ascii").strip()
+        return raw.decode("ascii", errors="replace")
     except UnicodeDecodeError:
-        return raw.decode("latin1", errors="replace").strip()
+        return raw.decode("latin1", errors="replace")
 
 
 def format_de_value(
@@ -170,4 +170,4 @@ def extract_de24_fast(
     if raw24 is None:
         return None
 
-    return decode_digits(raw24, enc).strip()
+    return decode_digits(raw24, enc)
