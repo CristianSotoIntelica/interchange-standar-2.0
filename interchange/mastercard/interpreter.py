@@ -105,7 +105,7 @@ def interpretate_msg(origin_layer, target_layer, client_id: str, file_id: str, o
     df = add_block_column(df)
 
     #5) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
-    BATCH_SIZE = 2000  
+    BATCH_SIZE = 20000  
 
     records = df.to_dict("records")
 
