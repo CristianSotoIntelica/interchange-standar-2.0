@@ -167,4 +167,4 @@ def extract_de24_fast(
     if raw24 is None:
         return None
 
-    return decode_digits(raw24, enc).strip()
+    return decode_digits(raw24, enc)
