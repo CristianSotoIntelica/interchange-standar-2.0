@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 from interchange.logs.logger import Logger
 from interchange.persistence.file import FileStorage
-from interchange.mastercard.utils.transform_de_1240 import filter_df_columns_de
+from interchange.mastercard.utils.transform_de_1240 import filter_df_columns_de, expand_subfields, reorder_with_subfield
 
 
 log = Logger(__name__)
@@ -25,18 +25,33 @@ def transform_ipm_1240(
         client_id=client_id, file_id=file_id, filepath=filepath)
 
         log.logger.debug(
-            f"Read parquet: {filepath} | rows = {len(df)}"
+            f"Read parquet after DE filter: {filepath} | rows = {len(df)} | cols: {len(df.columns)}\n"
+            f"Cols Names: {df.columns.to_list()}"
         )
 
+        # 3) Filtrar las columnas segun el layout del mensaje
         df_de_only = filter_df_columns_de(
             client_id=client_id, file_id=file_id, df=df
         )
 
-        print(df_de_only.head())
+        log.logger.debug(
+            f"Read parquet before DE filter: {filepath} | rows = {len(df_de_only)} | cols: {len(df_de_only.columns)}\n"
+            f"Cols Names: {df_de_only.columns.to_list()}"
+        )
 
-        print(f"Columns after DE filter ({len(df_de_only.columns)}):")
-        print(df_de_only.columns.tolist())
+        # 4) Expandir los DE por subfields según el layout del mensaje
+        df_expand = expand_subfields(df=df_de_only, mti='1240')
 
-    
-    
-    
+        log.logger.debug(
+            f"Read parquet DE subfields:    {filepath} | rows = {len(df_expand)} | cols: {len(df_expand.columns)}\n"
+            f"Cols Names: {df_expand.columns.to_list()}"
+        )        
+
+        df_expand = reorder_with_subfield(df=df_expand, mti_layout='1240')
+
+        log.logger.debug(
+            f"Read parquet reorder DE:     {filepath} | rows = {len(df_expand)} | cols: {len(df_expand.columns)}\n"
+            f"Cols Names: {df_expand.columns.to_list()}"
+        )
+
+        # 5) Logica los PDS y los PDS subfields
