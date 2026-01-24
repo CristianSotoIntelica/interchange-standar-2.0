@@ -67,10 +67,13 @@ def _load_as_binary(
         layer: FileStorage.Layer, client_id: str, file_id: str, subdir="") -> BinaryIO:
     return fs.read_binary(fs.Layer.LANDING, client_id, file_id, subdir, True)
 
-def interpretate_msg(origin_layer, target_layer, client_id: str, file_id: str, origin_subdir="", target_sub_dir="", test_path: str = "") -> None:
+def interpretate_msg(
+        origin_layer, target_layer, client_id: str, file_id: str, origin_subdir="", 
+        target_sub_dir="", test_path: str = "") -> None:
     
     # 1) Leer el archivo binario
-    stream_file = _load_as_binary(origin_layer, client_id, file_id, subdir=origin_subdir)
+    stream_file = _load_as_binary(
+        origin_layer, client_id, file_id, subdir=origin_subdir)
 
     # 2) Elimina los bloqueantes
     db = Database()
@@ -95,11 +98,8 @@ def interpretate_msg(origin_layer, target_layer, client_id: str, file_id: str, o
 
     df.loc[idx, "function_code"] = [
         extract_de24_fast(
-            body_hex=df.at[i, "body_hex"],
-            bitmap_hex=df.at[i, "bitmap_hex"],
-            enc=df.at[i, "enc"],
-            de_spec=DE_SPEC,
-        )
+            body_hex=df.at[i, "body_hex"], bitmap_hex=df.at[i, "bitmap_hex"],
+            enc=df.at[i, "enc"], de_spec=DE_SPEC)
         for i in idx
     ]
 
@@ -119,30 +119,18 @@ def interpretate_msg(origin_layer, target_layer, client_id: str, file_id: str, o
 
         df_wide_chunk = pd.DataFrame([
             build_wide_row(
-                msg_no=int(r["msg_no"]),
-                block=r.get("block"),
-                mti=r.get("mti"),
-                enc=r.get("enc"),
-                function_code=r.get("function_code"),
-                function_role=r.get("function_role"),
-                parse_ok=r.get("parse_ok", False),
-                bitmap_hex=r.get("bitmap_hex"),
-                body_hex=r.get("body_hex"),
-                de_spec=DE_SPEC,
-            )
+                msg_no=int(r["msg_no"]), block=r.get("block"), mti=r.get("mti"),
+                enc=r.get("enc"), function_code=r.get("function_code"),
+                function_role=r.get("function_role"), parse_ok=r.get("parse_ok", False),
+                bitmap_hex=r.get("bitmap_hex"), body_hex=r.get("body_hex"), 
+                de_spec=DE_SPEC)
             for r in chunk
         ])
 
         # escribe / clasifica este bloque por el chunk obtenido
         write_parquet_by_mti_block_streaming(
-                df_wide_chunk,
-                fs=fs,
-                target_layer=target_layer,
-                client_id=client_id,
-                file_id=file_id,
-                schema=schema,
-                writers=writers,
-        )
+                df_wide_chunk, fs=fs, target_layer=target_layer, client_id=client_id,
+                file_id=file_id, schema=schema, writers=writers)
 
         # libera memoria explícitamente
         del df_wide_chunk

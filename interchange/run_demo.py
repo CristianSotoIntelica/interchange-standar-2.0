@@ -2,7 +2,7 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from interchange.persistence.file import FileStorage
 from interchange.visa import transform, extract, clean, calculate, interchange, store
-from interchange.mastercard import interpreter
+from interchange.mastercard import interpreter, mc_transform
 from pathlib import Path
 import gc
 import time  # <-- añadimos time
@@ -130,6 +130,18 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
         file_id, # file_id (md5)
     )
 
+def pipeline_mc_1240(client_id: str, file_id: str):
+
+    timed(
+        mc_transform.transform_ipm_1240, # Function
+        layer.STAGING, # origin_layer
+        layer.STAGING, # target_layer
+        client_id, # client_id (bank)
+        file_id # file_id (md5)
+    )
+
+
+
 if __name__ == "__main__":
     client_id = "BRDRO"
     file_id = "ba4a9711221a6b137c56ceb064f54a01"
@@ -147,7 +159,10 @@ if __name__ == "__main__":
     #pipeline_visa_baseii(client_id, file_id)
     #pipeline_visa_sms(client_id, file_id)
     #pipeline_visa_vss(client_id, file_id)
-    pipeline_mc_interpreter(client_id,file_id)
+    #pipeline_mc_interpreter(client_id,file_id)
+    pipeline_mc_1240(client_id=client_id, file_id=file_id)
+
+
     #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():
         print(f"{func_name}: {t:.2f} s")

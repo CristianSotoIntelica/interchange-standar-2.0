@@ -3,7 +3,7 @@ from enum import StrEnum, auto
 
 import dotenv
 import pandas as pd
-from typing import BinaryIO
+from typing import BinaryIO, List, Optional
 import io
 
 from interchange.logs.logger import Logger
@@ -35,7 +35,7 @@ class FileStorage:
         self.basepath = os.environ["ITX_DATALAKE_PATH"]
 
     def _get_file_path(
-        self, layer: Layer, client_id: str, file_id: str, subdir: str = ""
+            self, layer: Layer, client_id: str, file_id: str, subdir: str = ""
     ) -> str:
         """
         Get the full path to a file based on its Client ID and File ID.
@@ -74,6 +74,32 @@ class FileStorage:
             subdir,
             file_id,
         )
+        return filepath
+    
+    def _get_folder_path(
+            self, layer: Layer, client_id: str, file_id: str, subdir: str = ""
+    ) -> str:
+        db = Database()
+        file_details = db.read_records(
+            table_name="file_control", 
+            fields=[
+                "brand_id", "file_type", "file_processing_date", "landing_file_name"
+            ],
+            where={
+                "client_id": client_id,
+                "file_id": file_id
+            }
+        ).iloc[0]
+
+        if layer == self.Layer.LANDING:
+            filepath = os.path.join(
+                self.basepath, layer, client_id, file_details.loc["landing_file_name"])
+            return filepath
+        
+        filepath = os.path.join(
+            self.basepath, layer, client_id, file_details.loc["brand_id"], 
+            file_details.loc["file_type"], file_details.loc["file_processing_date"],
+            subdir)
         return filepath
 
     def read_plaintext(
@@ -150,14 +176,8 @@ class FileStorage:
         data.to_parquet(filepath, index=True)
 
     def write_parquet_per_block(
-        self,
-        data: pd.DataFrame,
-        layer: Layer,
-        client_id: str,
-        file_id: str,
-        subdir: str = "",
-        name_block: str = ""
-    ) -> None:
+        self, data: pd.DataFrame, layer: Layer, client_id: str, file_id: str, 
+        subdir: str = "", name_block: str = "") -> None:
         """
         Write the given dataframe to a parquet file. Overwrites file if exists.
         """
@@ -168,3 +188,39 @@ class FileStorage:
             filepath = p.with_name(f"{p.stem}_{name_block}{p.suffix}")
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         data.to_parquet(filepath, index=True)
+
+    def read_parquet_by_filepath(
+            self, client_id: str, file_id: str, filepath: str) -> pd.DataFrame:
+
+        log.logger.debug(f"Searching for {client_id} file {file_id}")
+        return pd.read_parquet(filepath)
+    
+    def get_list_files_folderpath(
+            self, layer: Layer, client_id: str, file_id: str, subdir: str = ""):
+        
+        "Return a list of filepaths of parquets derivaded from the same file_id"
+        
+        folder = Path(self._get_folder_path(
+            layer=layer, client_id=client_id, file_id=file_id, subdir=subdir))
+        
+        if not folder.exists():
+            return []
+        
+        prefix = f"{file_id}"
+        files_lists = folder.rglob("*.parquet")
+        results: List[Path] = []
+
+        for file in files_lists:
+            name = file.name
+            # Debe empezar con {file_id}
+            if not name.startswith(prefix):
+                continue
+
+            results.append(file)
+
+        # Ordenar por nombres
+        results.sort(key=lambda x: x.name)
+
+        # Devolver el resultado
+        return [str(file) for file in results]
+
