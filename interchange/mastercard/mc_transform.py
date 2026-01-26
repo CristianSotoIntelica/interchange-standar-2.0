@@ -66,3 +66,7 @@ def transform_ipm_1240(
             f"Read parquet PDS + subfields:      {filepath} | rows = {len(df_expand)} | cols: {len(df_expand.columns)}\n"
             f"Cols Names: {df_expand.columns.to_list()}"
         )
+
+        # 6) Generar parquets
+
+        print(filepath)

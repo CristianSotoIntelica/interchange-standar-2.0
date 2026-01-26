@@ -17,17 +17,27 @@ def expand_fixed_width_series_to_df(
         return pd.DataFrame(index=getattr(serie, "index", None))
     
     # Normalize string
-    serie_txt = serie.fillna("").astype(str)
+    s = serie.fillna("").astype(str)
 
-    out = {}
-    pos = 0
-
+    mask = s.ne("")
+    if not mask.any():
+        cols = [f"{prefix}{k}" if prefix else k for k in spec.keys()]
+        return pd.DataFrame({c: pd.NA for c in cols}, index=serie.index)
+    
+    s_cut = s.where(mask) # Los vacions vuelven NAN
+    
+    out: dict[str, pd.Series] = {}
+    pos = 0 
     for name, ln in spec.items():
         col_name = f"{prefix}{name}" if prefix else name
-        out[col_name] = serie_txt.str.slice(pos, pos + int(ln))
+        # slice vectorizado pero en filas vacias quedara en NaN
+        out[col_name] = s_cut.str.slice(pos, pos + int(ln))
         pos = pos + int(ln)
 
-    return pd.DataFrame(out, index=serie.index)
+    df_out = pd.DataFrame(out, index=serie.index)
+
+    return df_out.where(df_out.notna(), pd.NA)
+
 
 def expand_fixed_width_columns(
         df: pd.DataFrame, specs_by_col: dict[str, dict[str, int]],
@@ -52,20 +62,18 @@ def expand_fixed_width_columns(
         # si permite ignorar y el col del specs no está en el df = no está en el df
         if only_if_present and col not in df.columns: 
             continue
-        
-        # dividir el texto entregado segun las especificaciones
-        sub_df = expand_fixed_width_series_to_df(serie= df[col], spec=spec)
-        #agregar los nuevos subfields a la lista 
-        parts.append(sub_df) 
 
-    # si no hay ninguno de los specs en el df, se retorna el df puro
+        s = df[col]
+        # Si esta  vacio al 100% no se expande
+        non_empty = s.notna() & (s.astype(str).str.len() > 0)
+        if not non_empty.any():
+            continue
+
+        sub_df = expand_fixed_width_series_to_df(serie=s, spec=spec)
+        parts.append(sub_df)
+
     if not parts:
         return df
     
-
-    # unir como un unico dataframe las partes divididas por el specs del df
     sub_all = pd.concat(parts, axis=1)
-    
-    # retornar en un solo concat final: df original + nuevas columnas
     return pd.concat([df, sub_all], axis=1)
-

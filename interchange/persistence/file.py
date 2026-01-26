@@ -175,17 +175,17 @@ class FileStorage:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         data.to_parquet(filepath, index=True)
 
-    def write_parquet_per_block(
+    def write_parquet_custom_name(
         self, data: pd.DataFrame, layer: Layer, client_id: str, file_id: str, 
-        subdir: str = "", name_block: str = "") -> None:
+        subdir: str = "", custom_name: str = "") -> None:
         """
         Write the given dataframe to a parquet file. Overwrites file if exists.
         """
         log.logger.debug(f"Writing {client_id} file {file_id} to parquet")
         filepath = f"{self._get_file_path(layer, client_id, file_id, subdir)}.parquet"
         p = Path(filepath)
-        if name_block != "":
-            filepath = p.with_name(f"{p.stem}_{name_block}{p.suffix}")
+        if custom_name != "":
+            filepath = p.with_name(f"{p.stem}_{custom_name}{p.suffix}")
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         data.to_parquet(filepath, index=True)
 
