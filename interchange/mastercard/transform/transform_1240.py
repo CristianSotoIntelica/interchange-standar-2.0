@@ -1,106 +1,15 @@
+from __future__ import annotations
+
 import pandas as pd
-from pathlib import Path
-import pyarrow.parquet as pq
 from typing import Dict, Union, cast
 
-PdsLayout = Dict[str, Union[int, Dict[str, int]]]
-
-DICT_PDS_LYT_1240: PdsLayout = {
-    "PDS_2": 3,
-    "PDS_3": 3,
-    "PDS_23": 3,
-    "PDS_25": 7,
-    "PDS_146": {
-        "PDS_146_1": 2,
-        "PDS_146_2": 2,
-        "PDS_146_3": 2,
-        "PDS_146_4": 3,
-        "PDS_146_5": 12,
-        "PDS_146_6": 3,
-        "PDS_146_7": 12,
-    },
-    "PDS_148": {
-        "PDS_148_1": 3,
-        "PDS_148_2": 1,
-    },
-    "PDS_158": {
-        "PDS_158_1": 3,
-        "PDS_158_2": 1,
-        "PDS_158_3": 6,
-        "PDS_158_4": 2,
-        "PDS_158_5": 6,
-        "PDS_158_6": 2,
-        "PDS_158_7": 1,
-        "PDS_158_8": 3,
-        "PDS_158_9": 1,
-        "PDS_158_10": 1,
-        "PDS_158_11": 1,
-        "PDS_158_12": 1,
-        "PDS_158_13": 1,
-    },
-    "PDS_165": {
-        "PDS_165_1": 1,
-        "PDS_165_2": 29,
-    },
-}
-
-DICT_DE_LYT_1240 = {
-    "DE_2": 19,
-    "DE_3": {"DE_3_1": 2, "DE_3_2": 2, "DE_3_3": 2},
-    "DE_4": 14,
-    "DE_5": 14,
-    "DE_6": 14,
-    "DE_9": 8,
-    "DE_10": 8,
-    "DE_12": {"DE_12_1": 6, "DE_12_2": 6},
-    "DE_14": 4,
-    "DE_22": {"DE_22_1": 1, "DE_22_2": 1, "DE_22_3": 1, "DE_22_4": 1, 
-              "DE_22_5": 1, "DE_22_6": 1, "DE_22_7": 1, "DE_22_8": 1, 
-              "DE_22_9": 1, "DE_22_10": 1, "DE_22_11": 1, "DE_22_12": 1},
-    "DE_23": 3,
-    "DE_24": 3,
-    "DE_25": 4,
-    "DE_26": 4,
-    "DE_30": {"DE_30_1": 12, "DE_30_2": 12},
-    "DE_31": {"DE_31_1": 1, "DE_31_2": 6, "DE_31_3": 4, "DE_31_4": 11, 
-              "DE_31_5": 1},
-    "DE_32": 11,
-    "DE_33": 11,
-    "DE_37": 12,
-    "DE_38": 6,
-    "DE_40": 3,
-    "DE_41": 8,
-    "DE_42": 15,
-    "DE_43": {"DE_43_1": 90, "DE_43_2": 90, "DE_43_3": 90, "DE_43_4": 90, 
-              "DE_43_5": 90, "DE_43_6": 90},
-    "DE_48": 999,
-    "DE_49": 3,
-    "DE_50": 3,
-    "DE_51": 3,
-    "DE_54": 120,
-    "DE_62": 999,
-    "DE_63": 16,
-    "DE_71": 8,
-    "DE_72": 999,
-    "DE_73": 6,
-    "DE_93": 11,
-    "DE_94": 11,
-    "DE_95": 10,
-    "DE_100": 11,
-    "DE_111": 12,
-    "DE_123": 100,
-    "DE_124": 100,
-    "DE_125": 100,
-    "DE_127": 100
-}
-
-TUPLE_DE_PDS_LYT_1240 = ("DE_48", "DE_62", "DE_123", "DE_124", "DE_125")
-
-BASE_COLS_1240 = ["MSG_NO", "BLOCK", "MTI", "ENC", "FUNCTION_CODE", "FUNCTION_ROLE", 
-                  "PARSE_OK", "DE_1"]
-
-# pdsLayout = 
-
+from interchange.mastercard.layouts.layout_1240 import (
+    PdsLayout,
+    DICT_DE_LYT_1240,
+    DICT_PDS_LYT_1240,
+    BASE_COLS_1240,
+    TUPLE_DE_PDS_LYT_1240,
+)
 
 def filter_df_columns_de(
         client_id: str, file_id: str, df: pd.DataFrame) -> pd.DataFrame:
@@ -112,7 +21,7 @@ def filter_df_columns_de(
     df_de_only = df[cols_to_keep]
 
     return df_de_only
-    
+
 def split_fixed_width(value: str, spec: dict[str, int]) -> dict[str, str]:
     
     if value is None:
@@ -123,8 +32,8 @@ def split_fixed_width(value: str, spec: dict[str, int]) -> dict[str, str]:
     pos = 0
     for name, ln in spec.items():
         out[name] = value[pos:pos+ln]
-        pos += ln
-    return out
+        pos = pos + ln
+    return out # PDS subfields como diccionario {PDS_123_1: valor, PDS_123_2: valor}
 
 def expand_one_fixed_width(df: pd.DataFrame, col:str, spec: dict[str, int]) -> pd.DataFrame:
     s = df[col].fillna("").astype(str)
@@ -198,11 +107,6 @@ def extract_pds(body_de: str, find_pds: int) -> str:
     else:
         return ''
     
-#######################################################################################
-# PDS #
-#######################################################################################
-
-# Ordenar PDS
 def build_pds_columns_order(pds_layout: PdsLayout) -> list[str]:
     cols: list[str] = []
 
@@ -213,24 +117,29 @@ def build_pds_columns_order(pds_layout: PdsLayout) -> list[str]:
             cols.extend(list(spec.keys()))
     return cols
 
-# Para expandir subcampos de PDS con subfields
 def expand_pds_subfields(df: pd.DataFrame, pds_layout: PdsLayout) -> pd.DataFrame:
     df_out = df
 
     for pds_name, spec in pds_layout.items():
-        if not isinstance(spec, dict):
+        if not isinstance(spec, dict): #Validar si tiene subfields
             continue
 
-        spec_dict = cast(dict[str, int], spec)
+        spec_dict = cast(dict[str, int], spec) # Castear el spec como dict[str: int]
 
-        if pds_name not in df_out.columns:
+        if pds_name not in df_out.columns: #Validar si el pds_name esta en el df_out
             continue
 
-        sub_df = df_out[pds_name].apply(lambda x: split_fixed_width(value=x, spec=spec)).apply(pd.Series)
+        sub_df = (
+            df_out[pds_name]
+            .apply(lambda x: split_fixed_width(value=x, spec=spec_dict))
+            .apply(pd.Series)
+        )
 
+        # Validar si los subfields del layout fueron encontrados en el sub_df
+        # Si no encuentra, le pone un valor NA
         for subc in spec.keys():
-            if subc not in sub_df.columns:
-                sub_df[subc] = pd.NA
+            if subc not in sub_df.columns: 
+                sub_df[subc] = pd.NA 
 
         df_out = df_out.join(sub_df)
 
@@ -287,4 +196,5 @@ def parse_pds_tlv_scan(
         # 5) Saltar todo el TLV (sea valido o un TLV que no es el buscado)
         i = end_val
 
-    return out
+    return out # return = {'PDS_2': 'value', 'PDS_3': 'value', 'PDS_4': 'value'}
+

@@ -1,6 +1,7 @@
+from interchange.mastercard.iso8583.detect_mti import detect_mti
+from interchange.mastercard.iso8583.split_mti import split_mti_bitmap_body
+
 import struct
-from interchange.mastercard.utils.detect_mti import detect_mti
-from interchange.mastercard.utils.split_mti import split_mti_bitmap_body
 
 def read_len_prefixed_messages(stream):
     """

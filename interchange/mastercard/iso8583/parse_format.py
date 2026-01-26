@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Dict, Optional, Set, Any
 import binascii
 
-from interchange.mastercard.utils.decode_digits import decode_digits
+from interchange.mastercard.iso8583.decode_digits import decode_digits
 
 DEFAULT_NUMERIC_DES: Set[int] = {
     2,3,4,5,6,9,10,12,14,23,24,25,26,30,37,38,49,50,51,71,73,93,94,95,100
@@ -128,7 +128,7 @@ def build_wide_row(
     bitmap = bytes.fromhex(bitmap_hex)
 
     # IMPORTANTE: bitmap_bits está en split_mti.py, lo importamos aquí para que interpreter quede limpio
-    from interchange.mastercard.utils.split_mti import bitmap_bits
+    from interchange.mastercard.iso8583.split_mti import bitmap_bits
     fields = bitmap_bits(bitmap)
 
     raw_map = parse_des_one_pass(body=body, fields=fields, enc=enc, de_spec=de_spec, max_de=128)
@@ -157,7 +157,7 @@ def extract_de24_fast(
     body = bytes.fromhex(body_hex)
     bitmap = bytes.fromhex(bitmap_hex)
 
-    from interchange.mastercard.utils.split_mti import bitmap_bits
+    from interchange.mastercard.iso8583.split_mti import bitmap_bits
     fields = bitmap_bits(bitmap)
 
     # Splitear los DE en formato HEX

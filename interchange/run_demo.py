@@ -156,10 +156,10 @@ if __name__ == "__main__":
     # file_id = "28ef73ae78c526c130fccb618a581359" # outgoing (no block)
     # file_id = "cda240036fbee87e93277789a703b8e5" # outgoing (no block)
 
-    #pipeline_visa_baseii(client_id, file_id)
-    #pipeline_visa_sms(client_id, file_id)
-    #pipeline_visa_vss(client_id, file_id)
-    #pipeline_mc_interpreter(client_id,file_id)
+    # pipeline_visa_baseii(client_id, file_id)
+    # pipeline_visa_sms(client_id, file_id)
+    # pipeline_visa_vss(client_id, file_id)
+    # pipeline_mc_interpreter(client_id,file_id)
     pipeline_mc_1240(client_id=client_id, file_id=file_id)
 
 

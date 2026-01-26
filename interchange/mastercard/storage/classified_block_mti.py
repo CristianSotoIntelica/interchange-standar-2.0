@@ -6,6 +6,9 @@ import pyarrow.parquet as pq
 
 from typing import Dict, Tuple
 
+from interchange.persistence.file import FileStorage
+fs = FileStorage()
+
 
 def _canonical_schema_from_de_spec(de_spec: dict) -> pa.Schema:
     # columnas base fijas
@@ -34,9 +37,6 @@ def _ensure_and_cast(table: pa.Table, schema: pa.Schema) -> pa.Table:
     # reordenar y castear
     table = table.select(schema.names)
     return table.cast(schema, safe=False)
-
-from interchange.persistence.file import FileStorage
-fs = FileStorage()
 
 def classified_block_mti_parts(
         df, target_layer:FileStorage.Layer , client_id:str, file_id:str,out_dir, *, 

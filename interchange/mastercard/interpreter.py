@@ -9,28 +9,17 @@ from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
 from interchange.persistence.file import FileStorage
 
-from interchange.mastercard.utils.unblock import unblock_1014
-from interchange.mastercard.utils.dataelements import Parameters
-from interchange.mastercard.utils.message_reader import read_len_prefixed_messages
-from interchange.mastercard.utils.parse_format import build_wide_row
-from interchange.mastercard.utils.parse_format import extract_de24_fast
-from interchange.mastercard.utils.classified_block_mti import write_parquet_by_mti_block_streaming
-from interchange.mastercard.utils.classified_block_mti import _canonical_schema_from_de_spec
-from interchange.mastercard.utils.classified_block_mti import finalize_writers
+from interchange.mastercard.io.unblock import unblock_1014
+from interchange.mastercard.io.message_reader import read_len_prefixed_messages
 
+from interchange.mastercard.iso8583.dataelements import Parameters
+from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast
 
-print(Path(__file__).resolve())
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
-print(PROJECT_ROOT)
-PATH_LOG = PROJECT_ROOT / "interchange" / "mastercard" / "log_test"
-
-print(PATH_LOG)
-
-PATH_PERSISTENCE = PROJECT_ROOT / "persistence"
-PATH_STAGING = PATH_PERSISTENCE / "files" / "staging" / "SBSA" 
-########################################################################################
+from interchange.mastercard.storage.classified_block_mti import (
+    write_parquet_by_mti_block_streaming,
+    _canonical_schema_from_de_spec,
+    finalize_writers,
+)
 
 log = Logger(__name__)
 fs = FileStorage()
