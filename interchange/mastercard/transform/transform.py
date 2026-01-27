@@ -21,6 +21,14 @@ from interchange.mastercard.layouts.layout_1644 import (
     TUPLE_DE_PDS_LYT_1644,
 )
 
+from interchange.mastercard.layouts.layout_1740 import (
+    PdsLayout,
+    DICT_DE_LYT_1740,
+    DICT_PDS_LYT_1740,
+    BASE_COLS_1740,
+    TUPLE_DE_PDS_LYT_1740,
+)
+
 def get_layouts_by_mti(mti: str) -> tuple[dict, dict, list[str], tuple]:
     """
     Devuelve (DICT_DE_LYT, DICT_PDS_LYT, BASE_COLS, TUPLE_DE_PDS)
@@ -30,6 +38,8 @@ def get_layouts_by_mti(mti: str) -> tuple[dict, dict, list[str], tuple]:
         return DICT_DE_LYT_1240, DICT_PDS_LYT_1240, BASE_COLS_1240, TUPLE_DE_PDS_LYT_1240
     elif mti == "1644":
         return DICT_DE_LYT_1644, DICT_PDS_LYT_1644, BASE_COLS_1644, TUPLE_DE_PDS_LYT_1644
+    elif mti == "1740":
+        return DICT_DE_LYT_1740, DICT_PDS_LYT_1740, BASE_COLS_1740, TUPLE_DE_PDS_LYT_1740
     else:
         raise ValueError(f"Unsupported MTI: {mti}")
 

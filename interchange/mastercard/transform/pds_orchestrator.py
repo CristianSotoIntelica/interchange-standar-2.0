@@ -6,6 +6,7 @@ import pandas as pd
 from interchange.mastercard.transform.fixed_width import expand_fixed_width_columns
 from interchange.mastercard.layouts.layout_1240 import (DICT_PDS_LYT_1240, TUPLE_DE_PDS_LYT_1240)
 from interchange.mastercard.layouts.layout_1644 import (DICT_PDS_LYT_1644, TUPLE_DE_PDS_LYT_1644)
+from interchange.mastercard.layouts.layout_1740 import (DICT_PDS_LYT_1740, TUPLE_DE_PDS_LYT_1740)
 
 PdsLayout = Dict[str, Union[int, Dict[str, int]]]
 
@@ -14,6 +15,8 @@ def get_pds_layout_by_mti(mti: str):
         return DICT_PDS_LYT_1240, TUPLE_DE_PDS_LYT_1240
     elif mti == "1644":
         return DICT_PDS_LYT_1644, TUPLE_DE_PDS_LYT_1644
+    elif mti == "1740":
+        return DICT_PDS_LYT_1740, TUPLE_DE_PDS_LYT_1740
     else:
         raise ValueError(f"Unsupported MTI for PDS pipeline: {mti}")
     
@@ -170,7 +173,7 @@ def expand_pds_subfields(
         
     return expand_fixed_width_columns(df, mapping)
 
-WANTED_TAG_1240: set[int] = {int(k.split("_")[1]) for k in DICT_PDS_LYT_1240.keys()}
+#WANTED_TAG_1240: set[int] = {int(k.split("_")[1]) for k in DICT_PDS_LYT_1240.keys()}
 
 def wanted_tags_from_layout(pds_layout: dict) -> set[int]:
     return {int(k.split("_")[1]) for k in pds_layout.keys()}
@@ -200,7 +203,7 @@ def apply_pds_for_mti_1240(df: pd.DataFrame) -> pd.DataFrame:
 
 def apply_pds_for_mti(df: pd.DataFrame, *, mti: str) -> pd.DataFrame:
     """
-    Pipeline PDS para MTI 1240 y 1644:
+    Pipeline PDS para MTI 1240, 1644 y 1740:
     1) extrae PDS desde contenedores definidos por el layout (DE_48, DE_62, etc.)
     2) expande subfields para PDS que lo requieran (los que en layout son dict)
     """
