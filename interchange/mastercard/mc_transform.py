@@ -69,4 +69,9 @@ def transform_ipm_1240(
 
         # 6) Generar parquets
 
-        print(filepath)
+        out_fp = fs.build_target_parquet_filepath_from_raw(
+            raw_filepath=filepath, target_layer=target_layer, client_id=client_id,
+            file_id=file_id, target_subdir=target_subir
+        )
+
+        fs.write_parquet_by_filepath(df_expand, out_fp, index=False)

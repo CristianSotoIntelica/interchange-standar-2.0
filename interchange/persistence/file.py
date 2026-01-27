@@ -1,6 +1,7 @@
 import os
 from enum import StrEnum, auto
 
+import re
 import dotenv
 import pandas as pd
 from typing import BinaryIO, List, Optional
@@ -175,19 +176,11 @@ class FileStorage:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         data.to_parquet(filepath, index=True)
 
-    def write_parquet_custom_name(
-        self, data: pd.DataFrame, layer: Layer, client_id: str, file_id: str, 
-        subdir: str = "", custom_name: str = "") -> None:
-        """
-        Write the given dataframe to a parquet file. Overwrites file if exists.
-        """
-        log.logger.debug(f"Writing {client_id} file {file_id} to parquet")
-        filepath = f"{self._get_file_path(layer, client_id, file_id, subdir)}.parquet"
+    def write_parquet_by_filepath(
+            self, data: pd.DataFrame, filepath: str, index: bool = False ) -> None:
         p = Path(filepath)
-        if custom_name != "":
-            filepath = p.with_name(f"{p.stem}_{custom_name}{p.suffix}")
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        data.to_parquet(filepath, index=True)
+        os.makedirs(p.parent, exist_ok=True)
+        data.to_parquet(p, index=index)
 
     def read_parquet_by_filepath(
             self, client_id: str, file_id: str, filepath: str) -> pd.DataFrame:
@@ -224,3 +217,25 @@ class FileStorage:
         # Devolver el resultado
         return [str(file) for file in results]
 
+    def build_target_name_from_raw_filepath(self, raw_filepath: str) -> str:
+        stem = Path(raw_filepath).stem
+
+        m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<block>\d+)_(?P<mti>\d{4})$", stem)
+        if m:
+            return f"{m.group('md5')}_{m.group('block')}_{m.group('mti')}.parquet"
+
+        m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_part-\d+_(?P<block>\d+)_(?P<mti>\d{4})$", stem)
+        if m:
+            return f"{m.group('md5')}_{m.group('block')}_{m.group('mti')}.parquet"
+        
+        raise ValueError(f"No reconozco nomenclatura del parquet raw: {Path(raw_filepath).name}")
+    
+
+    def build_target_parquet_filepath_from_raw(
+            self, raw_filepath: str, target_layer: Layer, client_id: str, file_id: str,
+            target_subdir: str,) -> str:
+        target_folder = Path(self._get_folder_path(
+            layer=target_layer, client_id=client_id, file_id=file_id, 
+            subdir=target_subdir))
+        target_filename = self.build_target_name_from_raw_filepath(raw_filepath)
+        return str(target_folder / target_filename)
