@@ -43,18 +43,6 @@ def get_layouts_by_mti(mti: str) -> tuple[dict, dict, list[str], tuple]:
     else:
         raise ValueError(f"Unsupported MTI: {mti}")
 
-
-# def filter_df_columns_de(
-#         client_id: str, file_id: str, df: pd.DataFrame) -> pd.DataFrame:
-    
-#     df = df.rename(columns=str.upper)
-#     cols_to_keep = ([c for c in BASE_COLS_1240 if c in df.columns] 
-#     + [c for c in DICT_DE_LYT_1240.keys() if c in df.columns])
-
-#     df_de_only = df[cols_to_keep]
-
-#     return df_de_only
-
 def filter_df_columns_de( df: pd.DataFrame, mti: str) -> pd.DataFrame:
     df = df.rename(columns=str.upper)
 

@@ -8,7 +8,6 @@ from interchange.mastercard.transform.transform import (
     expand_subfields,
     reorder_with_subfield,
 )
-from interchange.mastercard.transform.pds_orchestrator import apply_pds_for_mti_1240
 
 from interchange.mastercard.transform.pds_orchestrator import apply_pds_for_mti
 

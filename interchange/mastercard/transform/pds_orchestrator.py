@@ -173,33 +173,8 @@ def expand_pds_subfields(
         
     return expand_fixed_width_columns(df, mapping)
 
-#WANTED_TAG_1240: set[int] = {int(k.split("_")[1]) for k in DICT_PDS_LYT_1240.keys()}
-
 def wanted_tags_from_layout(pds_layout: dict) -> set[int]:
     return {int(k.split("_")[1]) for k in pds_layout.keys()}
-
-def apply_pds_for_mti_1240(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Pipeline PDS for MTI 1240:
-    1) extract PDS from containers (DE_48, DE_62, DE_123, DE_124, DE_125)
-    2) expands subfields for the PDSs that required (DICT_PDS_LYT_1240)
-    """
-    if df is None or df.empty:
-        return df
-    
-    if any(c != c.upper() for c in df.columns):
-        df = df.copy()
-        df.columns = [c.upper() for c in df.columns]
-
-    df2 = extract_pds_columns_from_containers_fast(
-        df=df, container_cols=TUPLE_DE_PDS_LYT_1240, wanted_tags= WANTED_TAG_1240
-    )
-
-    df3 = expand_pds_subfields(
-        df=df2, pds_layout=DICT_PDS_LYT_1240
-    )
-
-    return df3
 
 def apply_pds_for_mti(df: pd.DataFrame, *, mti: str) -> pd.DataFrame:
     """
