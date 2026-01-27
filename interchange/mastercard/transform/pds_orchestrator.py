@@ -4,12 +4,19 @@ from typing import Iterable, Dict, Union, cast
 import pandas as pd
 
 from interchange.mastercard.transform.fixed_width import expand_fixed_width_columns
-from interchange.mastercard.layouts.layout_1240 import (
-    DICT_PDS_LYT_1240, TUPLE_DE_PDS_LYT_1240
-)
+from interchange.mastercard.layouts.layout_1240 import (DICT_PDS_LYT_1240, TUPLE_DE_PDS_LYT_1240)
+from interchange.mastercard.layouts.layout_1644 import (DICT_PDS_LYT_1644, TUPLE_DE_PDS_LYT_1644)
 
 PdsLayout = Dict[str, Union[int, Dict[str, int]]]
 
+def get_pds_layout_by_mti(mti: str):
+    if mti == "1240":
+        return DICT_PDS_LYT_1240, TUPLE_DE_PDS_LYT_1240
+    elif mti == "1644":
+        return DICT_PDS_LYT_1644, TUPLE_DE_PDS_LYT_1644
+    else:
+        raise ValueError(f"Unsupported MTI for PDS pipeline: {mti}")
+    
 def parse_pds_tlv_scan_txt(blob: str, wanted_tag_txt: set[str]) -> dict[str, str]:
     """
     Parse PDS TLV with format:
@@ -165,6 +172,9 @@ def expand_pds_subfields(
 
 WANTED_TAG_1240: set[int] = {int(k.split("_")[1]) for k in DICT_PDS_LYT_1240.keys()}
 
+def wanted_tags_from_layout(pds_layout: dict) -> set[int]:
+    return {int(k.split("_")[1]) for k in pds_layout.keys()}
+
 def apply_pds_for_mti_1240(df: pd.DataFrame) -> pd.DataFrame:
     """
     Pipeline PDS for MTI 1240:
@@ -184,6 +194,36 @@ def apply_pds_for_mti_1240(df: pd.DataFrame) -> pd.DataFrame:
 
     df3 = expand_pds_subfields(
         df=df2, pds_layout=DICT_PDS_LYT_1240
+    )
+
+    return df3
+
+def apply_pds_for_mti(df: pd.DataFrame, *, mti: str) -> pd.DataFrame:
+    """
+    Pipeline PDS para MTI 1240 y 1644:
+    1) extrae PDS desde contenedores definidos por el layout (DE_48, DE_62, etc.)
+    2) expande subfields para PDS que lo requieran (los que en layout son dict)
+    """
+    if df is None or df.empty:
+        return df
+
+    # normalizar columnas a UPPER
+    if any(c != c.upper() for c in df.columns):
+        df = df.copy()
+        df.columns = [c.upper() for c in df.columns]
+
+    pds_layout, container_cols = get_pds_layout_by_mti(mti)
+    wanted_tags = wanted_tags_from_layout(pds_layout)
+
+    df2 = extract_pds_columns_from_containers_fast(
+        df=df,
+        container_cols=container_cols,
+        wanted_tags=wanted_tags,
+    )
+
+    df3 = expand_pds_subfields(
+        df=df2,
+        pds_layout=pds_layout,
     )
 
     return df3

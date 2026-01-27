@@ -3,6 +3,8 @@ from __future__ import annotations
 import pandas as pd
 from typing import Dict, Union, cast
 
+from typing import Tuple
+
 from interchange.mastercard.layouts.layout_1240 import (
     PdsLayout,
     DICT_DE_LYT_1240,
@@ -11,16 +13,48 @@ from interchange.mastercard.layouts.layout_1240 import (
     TUPLE_DE_PDS_LYT_1240,
 )
 
-def filter_df_columns_de(
-        client_id: str, file_id: str, df: pd.DataFrame) -> pd.DataFrame:
+from interchange.mastercard.layouts.layout_1644 import (
+    PdsLayout,
+    DICT_DE_LYT_1644,
+    DICT_PDS_LYT_1644,
+    BASE_COLS_1644,
+    TUPLE_DE_PDS_LYT_1644,
+)
+
+def get_layouts_by_mti(mti: str) -> tuple[dict, dict, list[str], tuple]:
+    """
+    Devuelve (DICT_DE_LYT, DICT_PDS_LYT, BASE_COLS, TUPLE_DE_PDS)
+    para el MTI indicado.
+    """
+    if mti == "1240":
+        return DICT_DE_LYT_1240, DICT_PDS_LYT_1240, BASE_COLS_1240, TUPLE_DE_PDS_LYT_1240
+    elif mti == "1644":
+        return DICT_DE_LYT_1644, DICT_PDS_LYT_1644, BASE_COLS_1644, TUPLE_DE_PDS_LYT_1644
+    else:
+        raise ValueError(f"Unsupported MTI: {mti}")
+
+
+# def filter_df_columns_de(
+#         client_id: str, file_id: str, df: pd.DataFrame) -> pd.DataFrame:
     
+#     df = df.rename(columns=str.upper)
+#     cols_to_keep = ([c for c in BASE_COLS_1240 if c in df.columns] 
+#     + [c for c in DICT_DE_LYT_1240.keys() if c in df.columns])
+
+#     df_de_only = df[cols_to_keep]
+
+#     return df_de_only
+
+def filter_df_columns_de( df: pd.DataFrame, mti: str) -> pd.DataFrame:
     df = df.rename(columns=str.upper)
-    cols_to_keep = ([c for c in BASE_COLS_1240 if c in df.columns] 
-    + [c for c in DICT_DE_LYT_1240.keys() if c in df.columns])
 
-    df_de_only = df[cols_to_keep]
+    dict_de, _, base_cols, _ = get_layouts_by_mti(mti)
 
-    return df_de_only
+    cols_to_keep = (
+        [c for c in base_cols if c in df.columns] +
+        [c for c in dict_de.keys() if c in df.columns]
+    )
+    return df[cols_to_keep]
 
 def split_fixed_width(value: str, spec: dict[str, int]) -> dict[str, str]:
     
@@ -45,39 +79,30 @@ def expand_one_fixed_width(df: pd.DataFrame, col:str, spec: dict[str, int]) -> p
     return df
 
 def expand_subfields(df: pd.DataFrame, mti: str) -> pd.DataFrame:
-    
-    if mti == '1240':
-        dic_layout = DICT_DE_LYT_1240
-    else:
-        raise ValueError(f"Unsupported mti_layout: {mti}")
-    
+    dict_de, _, _, _ = get_layouts_by_mti(mti)
+
     df_out = df.copy()
 
-    for de_name, de_spec in dic_layout.items():
-        # solo si existe la columna y tiene subcampos (dict)
+    for de_name, de_spec in dict_de.items():
         if de_name not in df_out.columns:
             continue
         if not isinstance(de_spec, dict):
             continue
 
-        # split por fila y expandir a columnas
         df_out = expand_one_fixed_width(df=df_out, col=de_name, spec=de_spec)
 
     return df_out
 
-def reorder_with_subfield(df: pd.DataFrame, mti_layout: str) -> pd.DataFrame:
+def reorder_with_subfield(df: pd.DataFrame, mti: str) -> pd.DataFrame:
 
-    if mti_layout == '1240':
-        layout = DICT_DE_LYT_1240
-    else: 
-        raise ValueError(f"Unsupported mti_layout: {mti_layout}")
+    dict_de, _, _, _ = get_layouts_by_mti(mti)
 
     col_set = set(df.columns)
     cols = []
 
     for c in df.columns:
         cols.append(c)
-        spec = layout.get(c)
+        spec = dict_de.get(c)
         if isinstance(spec, dict):
             # Agregar subcampos si existen
             for subc in spec.keys():

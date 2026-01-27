@@ -140,11 +140,19 @@ def pipeline_mc_1240(client_id: str, file_id: str):
         file_id # file_id (md5)
     )
 
+def pipeline_mc_1644(client_id: str, file_id: str):
 
+    timed(
+        mc_transform.transform_ipm_1644, # Function
+        layer.STAGING, # origin_layer
+        layer.STAGING, # target_layer
+        client_id, # client_id (bank)
+        file_id # file_id (md5)
+    )
 
 if __name__ == "__main__":
-    client_id = "BRDRO"
-    file_id = "ba4a9711221a6b137c56ceb064f54a01"
+    client_id = "ERSTHU"
+    file_id = "3a2fcd40621d021e48b293708a635fd3"
 
     # client_id = "SBSA"
     # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
@@ -161,7 +169,7 @@ if __name__ == "__main__":
     # pipeline_visa_vss(client_id, file_id)
     # pipeline_mc_interpreter(client_id,file_id)
     pipeline_mc_1240(client_id=client_id, file_id=file_id)
-
+    #pipeline_mc_1644(client_id=client_id, file_id=file_id)
 
     #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():
