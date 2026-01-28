@@ -98,7 +98,7 @@ def transform_ipm_1644(
         dfs = apply_pds_for_mti_1644_split(df_de_only)
         df_685 = dfs.get("685")
         df_688 = dfs.get("688")
-        
+        df_691= dfs.get("691")
         # 6) Generar parquets
         if df_685 is not None and not df_685.empty:
             out_fp = fs.build_target_parquet_filepath_from_raw(raw_filepath=filepath,target_layer=target_layer,client_id=client_id,file_id=file_id,target_subdir=target_subir, mti= '1644', fc='685')
@@ -106,6 +106,10 @@ def transform_ipm_1644(
         if df_688 is not None and not df_688.empty:
             out_fp = fs.build_target_parquet_filepath_from_raw(raw_filepath=filepath,target_layer=target_layer,client_id=client_id,file_id=file_id,target_subdir=target_subir, mti= '1644', fc='688')
             fs.write_parquet_by_filepath(df_688, out_fp, index=False)
+        if df_691 is not None and not df_691.empty:
+            out_fp = fs.build_target_parquet_filepath_from_raw(raw_filepath=filepath,target_layer=target_layer,client_id=client_id,file_id=file_id,target_subdir=target_subir, mti= '1644', fc='691')
+            fs.write_parquet_by_filepath(df_691, out_fp, index=False)
+
 
 def transform_ipm_1740(
         origin_layer: FileStorage.Layer, target_layer: FileStorage.Layer, 

@@ -226,7 +226,7 @@ def apply_pds_for_mti_1644_split(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         return {}
 
     fc_series = df["FUNCTION_CODE"].astype(str)
-    df = df[fc_series.isin({"685", "688"})]
+    df = df[fc_series.isin({"685", "688","691"})]
     if df.empty:
         return {}
 
