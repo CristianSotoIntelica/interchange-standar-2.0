@@ -234,8 +234,11 @@ class FileStorage:
         stem = Path(raw_filepath).stem
         #m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<block>\d+)_(?P<mti>\d{4})$", stem)
         print("STEM:", Path(raw_filepath).stem)
-        m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<file_idn>[A-Za-z\d]{25})_(?P<mti>\d{4})$", stem)
-
+        
+        if mti == "1644" and fc:
+            m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<file_idn>[A-Za-z\d]{25})_(?P<mti>\d{4})_(?P<fc>\d{3})$", stem)
+        else:
+            m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<file_idn>[A-Za-z\d]{25})_(?P<mti>\d{4})$", stem)
         #if not m:
         #    raise ValueError(f"No reconozco nomenclatura del parquet raw: {Path(raw_filepath).name}")
 
