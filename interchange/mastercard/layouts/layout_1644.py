@@ -171,4 +171,50 @@ BASE_COLS_1644 = [
     "DE_1",
 ]
 
- 
+ # Tags PDS qie se esperan por Function Code en MTI 1644
+PDS_TAGS_BY_FUNCTION_CODE_1644: dict[str, set[int]] = {
+    "685": {148, 165, 300, 302, 358, 370, 372, 374, 378, 380, 381, 384, 390, 391, 392, 393, 394, 395, 396, 400, 401, 402},
+    "688": {148, 300, 302, 359, 368, 369, 370, 372, 374, 378, 380, 381, 384, 390, 391, 392, 393, 394, 395, 396, 400, 401, 402},
+}
+
+
+def wanted_pds_tags_1644(function_code: str) -> set[int]:
+    """
+    Devuelve los tags PDS (int) que se deben extraer del DE48 según function_code.
+    Si no está definido, por defecto extrae TODOS los tags del layout (modo legacy).
+    """
+    fc = str(function_code) if function_code is not None else ""
+    tags = PDS_TAGS_BY_FUNCTION_CODE_1644.get(fc)
+    if tags:
+        return tags
+
+    # fallback: todos los tags definidos en el layout
+    out: set[int] = set()
+    for k in DICT_PDS_LYT_1644.keys():
+        # k = "PDS_358"
+        if k.startswith("PDS_"):
+            out.add(int(k.split("_")[1]))
+    return out
+
+
+def pds_layout_1644_for_tags(tags: set[int]) -> PdsLayout:
+    """
+    Filtra DICT_PDS_LYT_1644 y devuelve solo PDS_* cuyos tags están en `tags`.
+    Esto sirve para expandir subfields solo cuando aplica.
+    """
+    out: PdsLayout = {}
+    for k, spec in DICT_PDS_LYT_1644.items():
+        if not k.startswith("PDS_"):
+            continue
+        tag = int(k.split("_")[1])
+        if tag in tags:
+            out[k] = spec
+    return out
+
+
+def pds_layout_1644_for_function_code(function_code: str) -> PdsLayout:
+    """
+    Layout reducido para expandir subfields según FC.
+    """
+    tags = wanted_pds_tags_1644(function_code)
+    return pds_layout_1644_for_tags(tags)

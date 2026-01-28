@@ -68,7 +68,7 @@ DICT_DE_LYT_1740 = {
     "DE_71": 8,
 }
 
-TUPLE_DE_PDS_LYT_1740 = ("DE_48")
+TUPLE_DE_PDS_LYT_1740 = ("DE_48",)
 
 BASE_COLS_1740 = [
     "MSG_NO",
