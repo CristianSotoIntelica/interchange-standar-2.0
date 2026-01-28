@@ -2,7 +2,12 @@ from __future__ import annotations
 from typing import Dict, Optional, Set, Any
 import binascii
 
+import pandas as pd
+
 from interchange.mastercard.iso8583.decode_digits import decode_digits
+
+from typing import Iterable
+from typing import Callable
 
 DEFAULT_NUMERIC_DES: Set[int] = {
     2,3,4,5,6,9,10,12,14,23,24,25,26,30,37,38,49,50,51,71,73,93,94,95,100
@@ -109,6 +114,8 @@ def build_wide_row(
     Convierte un row base (con body_hex/bitmap_hex) a row wide con columnas de data elements
     """
     base = {
+        "file_idn": None,
+        "file_dt": None,
         "msg_no": msg_no,
         "block": block,
         "mti": mti,
@@ -118,6 +125,7 @@ def build_wide_row(
         "parse_ok": parse_ok,
     }
 
+    
     if not parse_ok or not isinstance(body_hex, str) or not isinstance(bitmap_hex, str) or not enc:
         # deja columnas DE_... como None igual (para consistencia)
         for de in sorted(de_spec.keys()):
@@ -168,3 +176,110 @@ def extract_de24_fast(
         return None
 
     return decode_digits(raw24, enc)
+
+
+def add_headers_fields_697(df: pd.DataFrame) -> None:
+    """
+    Para headers (function_code == '697'):
+      file_idn = SUBSTRING(de_48, 8, CAST(SUBSTRING(de_48,5,3) AS INT))
+      file_dt = SUBSTRING(File_ID, 4, 6)
+
+    Modifica el DataFrame IN-PLACE.
+    Asume que File_ID y File_DT YA existen.
+    """
+
+    mask = df["function_code"].astype(str).eq("697")
+    if not mask.any():
+        return
+
+    s = df.loc[mask, "de_48"].astype("string")
+
+    # largo = SUBSTRING(de_48,5,3)
+    largo = pd.to_numeric(s.str.slice(4, 7), errors="coerce").fillna(0).astype(int)
+
+    # resto desde posición 8
+    resto = s.str.slice(7)
+
+    # file_id con largo variable (pandas no soporta slice variable)
+    file_id = [
+        r[:l] if pd.notna(r) and l > 0 else pd.NA
+        for r, l in zip(resto, largo)
+    ]
+
+    file_id = pd.Series(file_id, index=s.index, dtype="string")
+
+    df.loc[mask, "file_idn"] = file_id
+    df.loc[mask, "file_dt"] = file_id.str.slice(3, 9)
+
+
+def apply_block_file_context_697(
+    df: pd.DataFrame,
+    *,
+    state: dict[int, tuple[str, str]],
+    strict: bool = False,
+) -> None:
+    """
+    Aplica el contexto file_idn/file_dt a todas las filas del DataFrame
+    según el header 697 y el block.
+
+    - df: DataFrame wide del chunk
+    - state: dict persistente entre chunks {block: (file_idn, file_dt)}
+    - strict: si True, falla si detecta más de un 697 por block
+
+    Modifica df IN-PLACE.
+    """
+
+    # -------------------------------------------------
+    # 1) Extraer headers 697 del chunk
+    # -------------------------------------------------
+    hdr = df["function_code"].astype("string").str.strip().eq("697")
+    if hdr.any():
+        h = (
+            df.loc[hdr, ["block", "file_idn", "file_dt"]]
+            .dropna(subset=["block", "file_idn"])
+        )
+
+        if not h.empty:
+            h["block"] = h["block"].astype(int)
+
+            # Validación: más de un header por block
+            dup = h["block"][h["block"].duplicated(keep=False)]
+            if not dup.empty:
+                blocks = sorted(dup.unique().tolist())
+                msg = f"Más de un header 697 para block(s): {blocks}"
+                if strict:
+                    raise ValueError(msg)
+                else:
+                    # loggear si quieres, aquí no pisamos nada
+                    print(f"[WARN] {msg}")
+
+            # Solo agregamos blocks nuevos (no pisamos)
+            new = ~h["block"].isin(state.keys())
+            h_new = h.loc[new]
+
+            if not h_new.empty:
+                state.update(
+                    dict(
+                        zip(
+                            h_new["block"].to_list(),
+                            zip(
+                                h_new["file_idn"].astype(str).to_list(),
+                                h_new["file_dt"].astype(str).to_list(),
+                            ),
+                        )
+                    )
+                )
+
+    # -------------------------------------------------
+    # 2) Asignar contexto por block (map vectorizado)
+    # -------------------------------------------------
+    m = df["block"].notna()
+    if m.any() and state:
+        pre = df.loc[m, "block"].astype(int).map(state)  # tuple o NaN
+        ok = pre.notna()
+        if ok.any():
+            idx = pre.index[ok]
+            vals = pre.loc[idx].tolist()
+
+            df.loc[idx, "file_idn"] = [v[0] for v in vals]
+            df.loc[idx, "file_dt"] = [v[1] for v in vals]

@@ -175,6 +175,8 @@ DICT_DE_LYT_1644: Dict[str, Union[int, Dict[str, int]]] = {
 TUPLE_DE_PDS_LYT_1644 = ("DE_48",)
 
 BASE_COLS_1644 = [
+    "FILE_IDN",
+    "FILE_DT",
     "MSG_NO",
     "BLOCK",
     "MTI",

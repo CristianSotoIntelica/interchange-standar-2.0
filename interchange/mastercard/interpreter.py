@@ -13,7 +13,7 @@ from interchange.mastercard.io.unblock import unblock_1014
 from interchange.mastercard.io.message_reader import read_len_prefixed_messages
 
 from interchange.mastercard.iso8583.dataelements import Parameters
-from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast
+from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast, add_headers_fields_697, apply_block_file_context_697
 
 from interchange.mastercard.storage.classified_block_mti import (
     write_parquet_by_mti_block_streaming,
@@ -103,6 +103,9 @@ def interpretate_msg(
     schema = _canonical_schema_from_de_spec(DE_SPEC)
     writers = {}  # key: (file_id, block, mti) -> ParquetWriter 
 
+    #último header conocido por block
+    block_state: dict[int, tuple[str, str]] = {}
+    
     for i in range(0, len(records), BATCH_SIZE):
         chunk = records[i : i + BATCH_SIZE]
 
@@ -115,6 +118,10 @@ def interpretate_msg(
                 de_spec=DE_SPEC)
             for r in chunk
         ])
+        
+        add_headers_fields_697(df_wide_chunk)
+        #Actualiza estado last_by_block con headers del chunk (vectorizado)
+        apply_block_file_context_697(df_wide_chunk,state=block_state,strict=False,) # o True si quieres romper ante errores)
 
         # escribe / clasifica este bloque por el chunk obtenido
         write_parquet_by_mti_block_streaming(
