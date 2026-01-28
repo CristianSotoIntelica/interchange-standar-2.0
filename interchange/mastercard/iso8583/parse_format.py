@@ -1,15 +1,17 @@
 from __future__ import annotations
-from typing import Dict, Optional, Set, Any
-import binascii
+from typing import Dict, Optional, Any
+from collections.abc import Set as AbstractSet
 
+from interchange.mastercard.iso8583.split_mti import bitmap_bits
 from interchange.mastercard.iso8583.decode_digits import decode_digits
 
-DEFAULT_NUMERIC_DES: Set[int] = {
+DEFAULT_NUMERIC_DES = frozenset({
     2,3,4,5,6,9,10,12,14,23,24,25,26,30,37,38,49,50,51,71,73,93,94,95,100
-}
-DEFAULT_BINARY_DES: Set[int] = {55}
-DEFAULT_EBCDIC_TEXT_DES: Set[int] = {43, 22}  # 43 seguro; 22 según lo que viste (c3/c4)
+})
+DEFAULT_BINARY_DES = frozenset({55})
+DEFAULT_EBCDIC_TEXT_DES = frozenset({43, 22})  # 43 seguro; 22 según lo que viste (c3/c4)
 
+DE_COL = {de: f"de_{de}" for de in range(2, 129)}
 
 def parse_des_one_pass(
         body: bytes, fields: list[int], enc: str, de_spec: dict, *, max_de: int = 128,
@@ -18,41 +20,50 @@ def parse_des_one_pass(
     if not body or not fields:
         return {}
 
-    present = sorted(f for f in fields if 2 <= f <= max_de)
     pos = 0
     out: Dict[int, bytes] = {}
 
-    for de in present:
-        cfg = de_spec.get(de)
+    de_get = de_spec.get
+
+    for de in fields:
+        if de < 2:
+            continue
+        if de > max_de:
+            break
+    
+        cfg = de_get(de)
         if not cfg:
             break
+        
+        length = cfg["length"]
 
         if cfg["fixed"]:
-            ln = int(cfg["length"])
+            ln = int(length)
+
             if pos + ln > len(body):
                 break
             raw = body[pos:pos + ln]
-            pos += ln
+            pos = pos + ln
         else:
-            len_digits = int(cfg["length"])  # 2 o 3 (LLVAR/LLLVAR)
+            len_digits = int(length)
+
             if pos + len_digits > len(body):
                 break
 
             raw_len = body[pos:pos + len_digits]
-            pos += len_digits
+            pos = pos + len_digits
 
-            ln_str = decode_digits(raw_len, enc).strip()
-            if not ln_str.isdigit():
+            try:
+                ln = int(decode_digits(raw_len, enc).strip())
+            except ValueError:
                 break
-            ln = int(ln_str)
 
             if pos + ln > len(body):
                 break
             raw = body[pos:pos + ln]
-            pos += ln
+            pos = pos + ln
 
         out[de] = raw
-
     return out
 
 
@@ -73,15 +84,15 @@ def format_de_value(
     raw: Optional[bytes],
     enc: str,
     *,
-    numeric_des: Set[int] = DEFAULT_NUMERIC_DES,
-    binary_des: Set[int] = DEFAULT_BINARY_DES,
-    ebcdic_text_des: Set[int] = DEFAULT_EBCDIC_TEXT_DES,
+    numeric_des: AbstractSet[int] = DEFAULT_NUMERIC_DES,
+    binary_des: AbstractSet[int] = DEFAULT_BINARY_DES,
+    ebcdic_text_des: AbstractSet[int] = DEFAULT_EBCDIC_TEXT_DES,
 ) -> Optional[str]:
     if raw is None:
         return None
 
     if de in binary_des:
-        return binascii.b2a_hex(raw).decode("ascii")
+        return raw.hex()
 
     if de in numeric_des:
         return decode_digits(raw, enc).strip()      
@@ -90,20 +101,14 @@ def format_de_value(
 
 
 def build_wide_row(
-    *,
-    msg_no: int,
-    block: Optional[int],
-    mti: Optional[str],
-    enc: Optional[str],
-    function_code: Optional[str],
-    function_role: Optional[str],
-    parse_ok: bool,
-    bitmap_hex: Optional[str],
-    body_hex: Optional[str],
-    de_spec: dict,
-    numeric_des: Set[int] = DEFAULT_NUMERIC_DES,
-    binary_des: Set[int] = DEFAULT_BINARY_DES,
-    ebcdic_text_des: Set[int] = DEFAULT_EBCDIC_TEXT_DES,
+        *, msg_no: int, block: Optional[int], mti: Optional[str], enc: Optional[str],
+    function_code: Optional[str], function_role: Optional[str], parse_ok: bool,
+    bitmap_hex: Optional[str], body_hex: Optional[str], de_spec: dict,
+    fields: Optional[list[int]] = None,
+    numeric_des: AbstractSet[int] = DEFAULT_NUMERIC_DES, 
+    binary_des: AbstractSet[int] = DEFAULT_BINARY_DES, 
+    ebcdic_text_des: AbstractSet[int] = DEFAULT_EBCDIC_TEXT_DES,
+    unknown_mode: str = "skip", # "skip" | "hex" | "bytes"
 ):
     """
     Convierte un row base (con body_hex/bitmap_hex) a row wide con columnas de data elements
@@ -118,47 +123,101 @@ def build_wide_row(
         "parse_ok": parse_ok,
     }
 
-    if not parse_ok or not isinstance(body_hex, str) or not isinstance(bitmap_hex, str) or not enc:
-        # deja columnas DE_... como None igual (para consistencia)
-        for de in sorted(de_spec.keys()):
-            base[f"de_{de}"] = None
+    # si no parsea o no hay datos, devuelve solo la base
+    if (not parse_ok) or (body_hex is None) or (not enc) or (bitmap_hex is None):
         return base
 
-    body = bytes.fromhex(body_hex)
-    bitmap = bytes.fromhex(bitmap_hex)
+    if isinstance(body_hex, (bytes, bytearray)):
+        body = bytes(body_hex)
+    elif isinstance(body_hex, str):
+        body = bytes.fromhex(body_hex)
+    else:
+        return base 
 
-    # IMPORTANTE: bitmap_bits está en split_mti.py, lo importamos aquí para que interpreter quede limpio
-    from interchange.mastercard.iso8583.split_mti import bitmap_bits
-    fields = bitmap_bits(bitmap)
+    if isinstance(bitmap_hex, (bytes, bytearray)):
+        bitmap = bytes(bitmap_hex)
+    elif isinstance(bitmap_hex, str):
+        bitmap = bytes.fromhex(bitmap_hex)
+    else:
+        return base
 
-    raw_map = parse_des_one_pass(body=body, fields=fields, enc=enc, de_spec=de_spec, max_de=128)
+    if fields is None:
+        fields = bitmap_bits(bitmap=bitmap)
 
-    for de in sorted(de_spec.keys()):
-        raw = raw_map.get(de)
-        base[f"de_{de}"] = format_de_value(
-            de, raw, enc,
-            numeric_des=numeric_des,
-            binary_des=binary_des,
-            ebcdic_text_des=ebcdic_text_des,
-        )
-    for de in sorted(de_spec.keys()):
-        k = f"de_{de}"
-        v = base.get(k)
-        base[k] = None if v is None else str(v)
+    # raw_map = parse_des_one_pass(body=body, fields=fields, enc=enc, de_spec=de_spec, max_de=128)
 
+    pos = 0 
+    de_get = de_spec.get
+    cols = DE_COL
+
+    num = numeric_des
+    bin_ = binary_des
+    txt_ = ebcdic_text_des 
+
+    for de in fields:
+        if de < 2:
+            continue
+        if de > 128:
+            break
+
+        cfg = de_get(de)
+        if not cfg:
+            break
+
+        length = int(cfg["length"])
+
+        if cfg["fixed"]:
+            ln = length
+        else:
+            if pos + length > len(body):
+                break
+            raw_len = body[pos:pos + length]
+            pos = pos + length
+            try:
+                ln = int(decode_digits(raw_len, enc).strip())
+            except ValueError:
+                break
+
+        if pos + ln > len(body):
+            break
+
+        raw = body[pos:pos + ln]
+        pos = pos + ln
+
+        col = cols[de]
+
+        if de in bin_:
+            base[col] = raw.hex()
+        elif de in num:
+            base[col] = decode_digits(raw, enc).strip()
+        elif de in txt_:
+            base[col] = decode_text_best(raw, enc)
+        else:
+            if unknown_mode == "hex":
+                base[col] = raw.hex()
+            elif unknown_mode == "bytes":
+                base[col] = raw
     return base
 
 def extract_de24_fast(
-        body_hex: Any, bitmap_hex: Any, enc: Any, de_spec: dict) -> str | None:
+        body_hex: Any, bitmap_hex: Any, enc: Any, de_spec: dict, 
+        fields: Optional[list[int]]) -> str | None:
     
-    if not body_hex or not bitmap_hex or not enc:
+    if (body_hex is None) or (bitmap_hex is None) or (not enc):
         return None
 
-    body = bytes.fromhex(body_hex)
-    bitmap = bytes.fromhex(bitmap_hex)
+    if isinstance(body_hex, (bytes, bytearray)):
+        body = bytes(body_hex)
+    else:
+        body = bytes.fromhex(body_hex)
 
-    from interchange.mastercard.iso8583.split_mti import bitmap_bits
-    fields = bitmap_bits(bitmap)
+    if isinstance(bitmap_hex, (bytes, bytearray)):
+        bitmap = bytes(bitmap_hex)
+    else:
+        bitmap = bytes.fromhex(bitmap_hex)
+
+    if fields is None:
+        fields = bitmap_bits(bitmap)
 
     # Splitear los DE en formato HEX
     raw_map = parse_des_one_pass(body=body, fields=fields, enc=enc, de_spec=de_spec, max_de=24) 
@@ -167,4 +226,4 @@ def extract_de24_fast(
     if raw24 is None:
         return None
 
-    return decode_digits(raw24, enc)
+    return decode_digits(raw24, enc).strip()

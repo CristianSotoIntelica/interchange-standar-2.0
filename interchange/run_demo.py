@@ -161,11 +161,9 @@ def pipeline_mc_1740(client_id: str, file_id: str):
     )
 
 if __name__ == "__main__":
-    client_id = "BTRLRO"
-    file_id = "e95a9221d9d5925feee4e1c0a3454549"
 
-    # client_id = "SBSA"
-    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+    client_id = "SBSA"
+    file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
 
     # client_id = "BTRLRO"
     # file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
@@ -178,9 +176,9 @@ if __name__ == "__main__":
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
     pipeline_mc_interpreter(client_id,file_id)
-    #pipeline_mc_1240(client_id=client_id, file_id=file_id)
-    #pipeline_mc_1644(client_id=client_id, file_id=file_id)
-    pipeline_mc_1740(client_id=client_id, file_id=file_id)
+    # pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    # pipeline_mc_1644(client_id=client_id, file_id=file_id)
+    # pipeline_mc_1740(client_id=client_id, file_id=file_id)
 
     #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():

@@ -1,9 +1,8 @@
 import io
+from typing import BinaryIO, Optional, cast
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from enum import Enum
-from typing import BinaryIO, Optional
 
 from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
@@ -21,9 +20,9 @@ from interchange.mastercard.storage.classified_block_mti import (
     finalize_writers,
 )
 
+
 log = Logger(__name__)
 fs = FileStorage()
-
 DE_SPEC = Parameters().getdataelements()
 
 def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -40,9 +39,9 @@ def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
         if h:
             current_block += 1
             open_block = True
-            block.append(current_block)
+            block.append(float(current_block))
         elif open_block:
-            block.append(current_block)
+            block.append(float(current_block))
         else:
             block.append(np.nan)
 
@@ -75,55 +74,77 @@ def interpretate_msg(
         unblocked_bytes = stream_file.read()
 
     # 3) Lee nuevamente al archivo binario nuevo, delvuele un arreglo de body/bitmap en HEX con su message type y lo guarda en un DF
-    rows = read_len_prefixed_messages(io.BytesIO(unblocked_bytes))
+    rows = read_len_prefixed_messages(io.BytesIO(unblocked_bytes), as_hex=False)
     df = pd.DataFrame(rows)
 
-    # 3) Obtiene el function code para generar los bloques, accede al data element 24
-    mask_1644 = df["mti"].eq("1644") & df["parse_ok"].eq(True)
+    del rows
+    
+    # asegurar bool real (evita objetos raros)
+    if "parse_ok" in df.columns:
+        df["parse_ok"] = df["parse_ok"].astype(bool)
 
+    # 4) Obtiene el function code para generar los bloques, accede al data element 24
     df["function_code"] = None
+    mask_1644 = df["mti"].eq("1644") & df["parse_ok"].eq(True)
+    
+    if mask_1644.any():
+        sub = df.loc[mask_1644, ["body", "bitmap", "enc", "fields"]]
+        df.loc[mask_1644, "function_code"] = [
+                extract_de24_fast(
+                    body_hex=b, bitmap_hex=bm, enc=e, de_spec=DE_SPEC, fields=f)
+                for b, bm, e, f in zip(
+                    sub["body"].values, 
+                    sub["bitmap"].values, 
+                    sub["enc"].values, 
+                    sub["fields"].values)
+            ]
 
-    idx = df.index[mask_1644]
-
-    df.loc[idx, "function_code"] = [
-        extract_de24_fast(
-            body_hex=df.at[i, "body_hex"], bitmap_hex=df.at[i, "bitmap_hex"],
-            enc=df.at[i, "enc"], de_spec=DE_SPEC)
-        for i in idx
-    ]
-
-    #4) Genera los bloques de acuerdo al function code y message type
+    #5) Genera los bloques de acuerdo al function code y message type
     df = add_block_column(df)
 
-    #5) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
-    BATCH_SIZE = 20000  
-
-    records = df.to_dict("records")
-
+    #6) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
+    BATCH_SIZE = 50000  # 20 000
     schema = _canonical_schema_from_de_spec(DE_SPEC)
-    writers = {}  # key: (file_id, block, mti) -> ParquetWriter 
+    writers: dict = {}  # key: (file_id, block, mti) -> ParquetWriter 
 
-    for i in range(0, len(records), BATCH_SIZE):
-        chunk = records[i : i + BATCH_SIZE]
+    n = len(df)
+    for start in range(0, n, BATCH_SIZE):
+        base_chunk = df.iloc[start:start + BATCH_SIZE]
+        base_chunk = base_chunk[base_chunk["block"].notna()]
+        if base_chunk.empty:
+            continue
 
-        df_wide_chunk = pd.DataFrame([
-            build_wide_row(
-                msg_no=int(r["msg_no"]), block=r.get("block"), mti=r.get("mti"),
-                enc=r.get("enc"), function_code=r.get("function_code"),
-                function_role=r.get("function_role"), parse_ok=r.get("parse_ok", False),
-                bitmap_hex=r.get("bitmap_hex"), body_hex=r.get("body_hex"), 
-                de_spec=DE_SPEC)
-            for r in chunk
-        ])
+        wide_rows = []
+        for r in base_chunk.itertuples(index=False, name="Msg"):
+            wide_rows.append(
+                build_wide_row(
+                    msg_no=cast(int,r.msg_no),
+                    block=cast(int,r.block),
+                    mti=cast(Optional[str], r.mti),
+                    enc=cast(Optional[str],r.enc),
+                    function_code=cast(Optional[str],r.function_code),
+                    function_role=getattr(r, "function_role", None),
+                    parse_ok=cast(bool, r.parse_ok),
+                    bitmap_hex=cast(Optional[str], r.bitmap),
+                    body_hex=cast(Optional[str], r.body),
+                    de_spec=DE_SPEC,
+                    fields=cast(Optional[list[int]], r.fields),
+                )
+            )
 
-        # escribe / clasifica este bloque por el chunk obtenido
+        df_wide_chunk = pd.DataFrame(wide_rows)
+        del wide_rows
+
+        df_wide_chunk = df_wide_chunk.reindex(columns=schema.names)
+        df_wide_chunk["msg_no"] = df_wide_chunk["msg_no"].astype("int64")
+        df_wide_chunk["block"] = df_wide_chunk["block"].astype("int64")
+        df_wide_chunk["parse_ok"] = df_wide_chunk["parse_ok"].astype(bool)
+
         write_parquet_by_mti_block_streaming(
-                df_wide_chunk, fs=fs, target_layer=target_layer, client_id=client_id,
-                file_id=file_id, schema=schema, writers=writers)
+            df_chunk=df_wide_chunk, fs=fs, target_layer=target_layer, 
+            client_id=client_id, file_id=file_id, schema=schema, writers=writers)
 
-        # libera memoria explícitamente
+        # libera DF del chunk
         del df_wide_chunk
 
-    finalize_writers(writers)
-
-
+    finalize_writers(writers=writers)
