@@ -1,9 +1,8 @@
 import io
+from typing import BinaryIO, Optional, cast
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from enum import Enum
-from typing import BinaryIO, Optional
 
 from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
@@ -14,6 +13,7 @@ from interchange.mastercard.io.message_reader import read_len_prefixed_messages
 
 from interchange.mastercard.iso8583.dataelements import Parameters
 from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast, add_headers_fields_697, apply_block_file_context_697
+from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast, add_headers_fields_697, apply_block_file_context_697
 
 from interchange.mastercard.storage.classified_block_mti import (
     write_parquet_by_mti_block_streaming,
@@ -23,7 +23,6 @@ from interchange.mastercard.storage.classified_block_mti import (
 
 log = Logger(__name__)
 fs = FileStorage()
-
 DE_SPEC = Parameters().getdataelements()
 
 def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -40,9 +39,9 @@ def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
         if h:
             current_block += 1
             open_block = True
-            block.append(current_block)
+            block.append(float(current_block))
         elif open_block:
-            block.append(current_block)
+            block.append(float(current_block))
         else:
             block.append(np.nan)
 
@@ -59,7 +58,7 @@ def _load_as_binary(
 def interpretate_msg(
         origin_layer, target_layer, client_id: str, file_id: str, origin_subdir="", 
         target_sub_dir="", test_path: str = "") -> None:
-    
+       
     # 1) Leer el archivo binario
     stream_file = _load_as_binary(
         origin_layer, client_id, file_id, subdir=origin_subdir)
@@ -75,35 +74,40 @@ def interpretate_msg(
         unblocked_bytes = stream_file.read()
 
     # 3) Lee nuevamente al archivo binario nuevo, delvuele un arreglo de body/bitmap en HEX con su message type y lo guarda en un DF
-    rows = read_len_prefixed_messages(io.BytesIO(unblocked_bytes))
+    rows = read_len_prefixed_messages(io.BytesIO(unblocked_bytes), as_hex=False)
+
     df = pd.DataFrame(rows)
 
-    # 3) Obtiene el function code para generar los bloques, accede al data element 24
-    mask_1644 = df["mti"].eq("1644") & df["parse_ok"].eq(True)
+    del rows
+    
+    # asegurar bool real (evita objetos raros)
+    if "parse_ok" in df.columns:
+        df["parse_ok"] = df["parse_ok"].astype(bool)
 
+    # 4) Obtiene el function code para generar los bloques, accede al data element 24
     df["function_code"] = None
+    mask_1644 = df["mti"].eq("1644") & df["parse_ok"].eq(True)
+    
+    if mask_1644.any():
+        sub = df.loc[mask_1644, ["body", "bitmap", "enc", "fields"]]
+        df.loc[mask_1644, "function_code"] = [
+                extract_de24_fast(
+                    body_hex=b, bitmap_hex=bm, enc=e, de_spec=DE_SPEC, fields=f)
+                for b, bm, e, f in zip(
+                    sub["body"].values, 
+                    sub["bitmap"].values, 
+                    sub["enc"].values, 
+                    sub["fields"].values
+                    )
+            ]
 
-    idx = df.index[mask_1644]
-
-    df.loc[idx, "function_code"] = [
-        extract_de24_fast(
-            body_hex=df.at[i, "body_hex"], bitmap_hex=df.at[i, "bitmap_hex"],
-            enc=df.at[i, "enc"], de_spec=DE_SPEC)
-        for i in idx
-    ]
-
-    #4) Genera los bloques de acuerdo al function code y message type
+    #5) Genera los bloques de acuerdo al function code y message type
     df = add_block_column(df)
 
-    #5) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
-    BATCH_SIZE = 20000  
-
-    records = df.to_dict("records")
-
+    #6) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
+    BATCH_SIZE = 50000  # 20 000
     schema = _canonical_schema_from_de_spec(DE_SPEC)
-    writers = {}  # key: (file_id, block, mti) -> ParquetWriter 
-
-    #último header conocido por block
+    writers: dict = {}  # key: (file_id, block, mti) -> ParquetWriter 
     block_state: dict[int, tuple[str, str]] = {}
     
     for i in range(0, len(records), BATCH_SIZE):
@@ -125,12 +129,10 @@ def interpretate_msg(
 
         # escribe / clasifica este bloque por el chunk obtenido
         write_parquet_by_mti_block_streaming(
-                df_wide_chunk, fs=fs, target_layer=target_layer, client_id=client_id,
-                file_id=file_id, schema=schema, writers=writers)
+            df_chunk=df_wide_chunk, fs=fs, target_layer=target_layer, 
+            client_id=client_id, file_id=file_id, schema=schema, writers=writers)
 
-        # libera memoria explícitamente
+        # libera DF del chunk
         del df_wide_chunk
 
-    finalize_writers(writers)
-
-
+    finalize_writers(writers=writers)

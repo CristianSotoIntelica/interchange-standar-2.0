@@ -105,7 +105,6 @@ def extract_pds_columns_from_containers_fast(
         s = df[c].fillna("").astype(str)
         series_cache[c] = s
         non_empty = (s != "").sum()
-        print(f"[PDS] {c}: non-empty {non_empty}/{n} ({non_empty/n:.1%})")
         if non_empty > 0:
             cols_with_data.append(c)
 

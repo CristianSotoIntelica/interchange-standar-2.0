@@ -1,9 +1,7 @@
 import pandas as pd 
-import os
 from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
-
 from typing import Dict, Tuple
 
 from interchange.persistence.file import FileStorage
@@ -39,39 +37,6 @@ def _ensure_and_cast(table: pa.Table, schema: pa.Schema) -> pa.Table:
     # reordenar y castear
     table = table.select(schema.names)
     return table.cast(schema, safe=False)
-
-# ELIMINAR
-# def classified_block_mti_parts(
-#         df, target_layer:FileStorage.Layer , client_id:str, file_id:str,out_dir, *, 
-#         part_id: int):
-#     """
-#     Escribe parquets por (block, mti) en archivos part-XXXX.parquet
-#     para soportar chunks SIN sobrescribir.
-#     """
-#     out_dir = Path(out_dir)
-
-#     for (block, mti), g in df.groupby(["block", "mti"], sort=False):
-#         g: pd.DataFrame
-#         block_str = "NA" if block != block else str(int(block))  # NaN-safe
-#         mti_str = "UNK" if mti is None else str(mti)
-#         name_block = f"part-{part_id:06d}_{block_str}_{mti_str}"
-
-#         if mti_str == '1240':
-#             fs.write_parquet_per_block(
-#                 data=g, layer=target_layer, client_id=client_id, file_id=file_id, 
-#                 subdir="100_IPM_1240_RAW", name_block=name_block)
-#         elif mti_str == '1442':
-#             fs.write_parquet_per_block(
-#                 data=g, layer=target_layer, client_id=client_id, file_id=file_id, 
-#                 subdir="100_IPM_1442_RAW", name_block=name_block)
-#         elif mti_str == '1644':
-#             fs.write_parquet_per_block(
-#                 data=g, layer=target_layer, client_id=client_id, file_id=file_id, 
-#                 subdir="100_IPM_1644_RAW", name_block=name_block)
-#         elif mti_str == '1740':
-#             fs.write_parquet_per_block(
-#                 data=g, layer=target_layer, client_id=client_id, file_id=file_id, 
-#                 subdir="100_IPM_1740_RAW", name_block=name_block)
 
 def subdir_for_mti(mti: str) -> str:
     mti = str(mti)
