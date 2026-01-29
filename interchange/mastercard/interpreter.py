@@ -12,14 +12,13 @@ from interchange.mastercard.io.unblock import unblock_1014
 from interchange.mastercard.io.message_reader import read_len_prefixed_messages
 
 from interchange.mastercard.iso8583.dataelements import Parameters
-from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast
+from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast, add_headers_fields_697, apply_block_file_context_697
 
 from interchange.mastercard.storage.classified_block_mti import (
     write_parquet_by_mti_block_streaming,
     _canonical_schema_from_de_spec,
     finalize_writers,
 )
-
 
 log = Logger(__name__)
 fs = FileStorage()
@@ -58,7 +57,7 @@ def _load_as_binary(
 def interpretate_msg(
         origin_layer, target_layer, client_id: str, file_id: str, origin_subdir="", 
         target_sub_dir="", test_path: str = "") -> None:
-    
+       
     # 1) Leer el archivo binario
     stream_file = _load_as_binary(
         origin_layer, client_id, file_id, subdir=origin_subdir)
@@ -75,6 +74,7 @@ def interpretate_msg(
 
     # 3) Lee nuevamente al archivo binario nuevo, delvuele un arreglo de body/bitmap en HEX con su message type y lo guarda en un DF
     rows = read_len_prefixed_messages(io.BytesIO(unblocked_bytes), as_hex=False)
+
     df = pd.DataFrame(rows)
 
     del rows
@@ -96,7 +96,8 @@ def interpretate_msg(
                     sub["body"].values, 
                     sub["bitmap"].values, 
                     sub["enc"].values, 
-                    sub["fields"].values)
+                    sub["fields"].values
+                    )
             ]
 
     #5) Genera los bloques de acuerdo al function code y message type
@@ -106,15 +107,20 @@ def interpretate_msg(
     BATCH_SIZE = 50000  # 20 000
     schema = _canonical_schema_from_de_spec(DE_SPEC)
     writers: dict = {}  # key: (file_id, block, mti) -> ParquetWriter 
+    block_state: dict[int, tuple[str, str]] = {}
 
     n = len(df)
+    #último header conocido por block
+
     for start in range(0, n, BATCH_SIZE):
-        base_chunk = df.iloc[start:start + BATCH_SIZE]
+        base_chunk = df.iloc[start:start+BATCH_SIZE]
         base_chunk = base_chunk[base_chunk["block"].notna()]
+        
         if base_chunk.empty:
             continue
-
+        
         wide_rows = []
+
         for r in base_chunk.itertuples(index=False, name="Msg"):
             wide_rows.append(
                 build_wide_row(
@@ -136,10 +142,12 @@ def interpretate_msg(
         del wide_rows
 
         df_wide_chunk = df_wide_chunk.reindex(columns=schema.names)
-        df_wide_chunk["msg_no"] = df_wide_chunk["msg_no"].astype("int64")
-        df_wide_chunk["block"] = df_wide_chunk["block"].astype("int64")
-        df_wide_chunk["parse_ok"] = df_wide_chunk["parse_ok"].astype(bool)
 
+        add_headers_fields_697(df_wide_chunk)
+        #Actualiza estado last_by_block con headers del chunk (vectorizado)
+        apply_block_file_context_697(df_wide_chunk,state=block_state,strict=False,) # o True si quieres romper ante errores)
+
+        # escribe / clasifica este bloque por el chunk obtenido
         write_parquet_by_mti_block_streaming(
             df_chunk=df_wide_chunk, fs=fs, target_layer=target_layer, 
             client_id=client_id, file_id=file_id, schema=schema, writers=writers)

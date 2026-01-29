@@ -46,13 +46,15 @@ def get_layouts_by_mti(mti: str) -> tuple[dict, dict, list[str], tuple]:
 
 def filter_df_columns_de( df: pd.DataFrame, mti: str) -> pd.DataFrame:
     df = df.rename(columns=str.upper)
-
+    
     dict_de, _, base_cols, _ = get_layouts_by_mti(mti)
 
     cols_to_keep = (
         [c for c in base_cols if c in df.columns] +
         [c for c in dict_de.keys() if c in df.columns]
     )
+    #print(df[cols_to_keep].columns)
+    
     return df[cols_to_keep]
 
 def expand_subfields(df: pd.DataFrame, mti: str) -> pd.DataFrame:
