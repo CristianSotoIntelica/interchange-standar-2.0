@@ -172,10 +172,8 @@ def expand_pds_subfields(
         
     return expand_fixed_width_columns(df, mapping)
 
-
 def wanted_tags_from_layout(pds_layout: dict) -> set[int]:
     return {int(k.split("_")[1]) for k in pds_layout.keys()}
-
 
 def apply_pds_for_mti(df: pd.DataFrame, *, mti: str) -> pd.DataFrame:
     """

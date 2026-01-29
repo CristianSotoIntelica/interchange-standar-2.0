@@ -47,7 +47,6 @@ def get_layouts_by_mti(mti: str) -> tuple[dict, dict, list[str], tuple]:
 def filter_df_columns_de( df: pd.DataFrame, mti: str) -> pd.DataFrame:
     df = df.rename(columns=str.upper)
     
-    
     dict_de, _, base_cols, _ = get_layouts_by_mti(mti)
 
     cols_to_keep = (
@@ -55,10 +54,6 @@ def filter_df_columns_de( df: pd.DataFrame, mti: str) -> pd.DataFrame:
         [c for c in dict_de.keys() if c in df.columns]
     )
     #print(df[cols_to_keep].columns)
-    
-    return df[cols_to_keep]
-
-def split_fixed_width(value: str, spec: dict[str, int]) -> dict[str, str]:
     
     return df[cols_to_keep]
 

@@ -133,4 +133,3 @@ def transform_ipm_1740(
         )
 
         fs.write_parquet_by_filepath(df_expand, out_fp, index=False)
-

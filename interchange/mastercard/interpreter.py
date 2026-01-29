@@ -13,7 +13,6 @@ from interchange.mastercard.io.message_reader import read_len_prefixed_messages
 
 from interchange.mastercard.iso8583.dataelements import Parameters
 from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast, add_headers_fields_697, apply_block_file_context_697
-from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast, add_headers_fields_697, apply_block_file_context_697
 
 from interchange.mastercard.storage.classified_block_mti import (
     write_parquet_by_mti_block_streaming,
@@ -109,20 +108,41 @@ def interpretate_msg(
     schema = _canonical_schema_from_de_spec(DE_SPEC)
     writers: dict = {}  # key: (file_id, block, mti) -> ParquetWriter 
     block_state: dict[int, tuple[str, str]] = {}
-    
-    for i in range(0, len(records), BATCH_SIZE):
-        chunk = records[i : i + BATCH_SIZE]
 
-        df_wide_chunk = pd.DataFrame([
-            build_wide_row(
-                msg_no=int(r["msg_no"]), block=r.get("block"), mti=r.get("mti"),
-                enc=r.get("enc"), function_code=r.get("function_code"),
-                function_role=r.get("function_role"), parse_ok=r.get("parse_ok", False),
-                bitmap_hex=r.get("bitmap_hex"), body_hex=r.get("body_hex"), 
-                de_spec=DE_SPEC)
-            for r in chunk
-        ])
+    n = len(df)
+    #último header conocido por block
+
+    for start in range(0, n, BATCH_SIZE):
+        base_chunk = df.iloc[start:start+BATCH_SIZE]
+        base_chunk = base_chunk[base_chunk["block"].notna()]
         
+        if base_chunk.empty:
+            continue
+        
+        wide_rows = []
+
+        for r in base_chunk.itertuples(index=False, name="Msg"):
+            wide_rows.append(
+                build_wide_row(
+                    msg_no=cast(int,r.msg_no),
+                    block=cast(int,r.block),
+                    mti=cast(Optional[str], r.mti),
+                    enc=cast(Optional[str],r.enc),
+                    function_code=cast(Optional[str],r.function_code),
+                    function_role=getattr(r, "function_role", None),
+                    parse_ok=cast(bool, r.parse_ok),
+                    bitmap_hex=cast(Optional[str], r.bitmap),
+                    body_hex=cast(Optional[str], r.body),
+                    de_spec=DE_SPEC,
+                    fields=cast(Optional[list[int]], r.fields),
+                )
+            )
+
+        df_wide_chunk = pd.DataFrame(wide_rows)
+        del wide_rows
+
+        df_wide_chunk = df_wide_chunk.reindex(columns=schema.names)
+
         add_headers_fields_697(df_wide_chunk)
         #Actualiza estado last_by_block con headers del chunk (vectorizado)
         apply_block_file_context_697(df_wide_chunk,state=block_state,strict=False,) # o True si quieres romper ante errores)

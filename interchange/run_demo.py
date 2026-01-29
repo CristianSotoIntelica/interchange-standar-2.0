@@ -182,7 +182,7 @@ if __name__ == "__main__":
     #pipeline_mc_1240(client_id=client_id, file_id=file_id)
     pipeline_mc_1644(client_id=client_id, file_id=file_id)
     #pipeline_mc_1740(client_id=client_id, file_id=file_id)
-    pipeline_mc_interpreter(client_id,file_id)
+    #pipeline_mc_interpreter(client_id,file_id)
     # pipeline_mc_1240(client_id=client_id, file_id=file_id)
     # pipeline_mc_1644(client_id=client_id, file_id=file_id)
     # pipeline_mc_1740(client_id=client_id, file_id=file_id)
