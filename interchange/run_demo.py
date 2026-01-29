@@ -132,12 +132,20 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
 
 def pipeline_mc_1240(client_id: str, file_id: str):
 
+    # timed(
+    #     mc_transform.transform_ipm_1240, # Function
+    #     layer.STAGING, # origin_layer
+    #     layer.STAGING, # target_layer
+    #     client_id, # client_id (bank)
+    #     file_id # file_id (md5)
+    # )
+
     timed(
-        mc_transform.transform_ipm_1240, # Function
-        layer.STAGING, # origin_layer
-        layer.STAGING, # target_layer
+        mc_extract.extract_1240_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
         client_id, # client_id (bank)
-        file_id # file_id (md5)
+        file_id, # file_id (md5)
     )
 
 def pipeline_mc_1644(client_id: str, file_id: str):
@@ -178,8 +186,8 @@ if __name__ == "__main__":
     # pipeline_visa_baseii(client_id, file_id)
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
-    pipeline_mc_interpreter(client_id,file_id)
-    # pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    # pipeline_mc_interpreter(client_id,file_id)
+    pipeline_mc_1240(client_id=client_id, file_id=file_id)
     # pipeline_mc_1644(client_id=client_id, file_id=file_id)
     # pipeline_mc_1740(client_id=client_id, file_id=file_id)
 
