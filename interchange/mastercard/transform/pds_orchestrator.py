@@ -232,17 +232,15 @@ def apply_pds_for_mti_1644_split(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     for fc, g in df.groupby("FUNCTION_CODE", dropna=False):
         fc_str = str(fc)
 
-        tags = wanted_pds_tags_1644(fc_str)
-        pds_layout_fc = pds_layout_1644_for_tags(tags)
+        tags = wanted_pds_tags_1644(fc_str) #trae los tags (pds) que se van a usar de acuerdo al function code
+        #print(list(tags))
+        pds_layout_fc = pds_layout_1644_for_tags(tags) #traer los pds que se usaran
 
         g2 = extract_pds_columns_from_containers_fast(
             df=g,
             container_cols=TUPLE_DE_PDS_LYT_1644,  # DE_48
             wanted_tags=tags,
         )
-
         g3 = expand_pds_subfields(df=g2, pds_layout=pds_layout_fc)
-
         out[fc_str] = g3.sort_index()
-
     return out

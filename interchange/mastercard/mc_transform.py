@@ -82,10 +82,12 @@ def transform_ipm_1644(
         #print(df_de_only.columns)
     
         dfs = apply_pds_for_mti_1644_split(df_de_only)
+
         df_685 = dfs.get("685")
         df_688 = dfs.get("688")
         df_691= dfs.get("691")
-        
+
+       
         # 6) Generar parquets
         if df_685 is not None and not df_685.empty:
             out_fp = fs.build_target_parquet_filepath_from_raw(raw_filepath=filepath,target_layer=target_layer,client_id=client_id,file_id=file_id,target_subdir=target_subir, mti= '1644', fc='685')
