@@ -132,13 +132,13 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
 
 def pipeline_mc_1240(client_id: str, file_id: str):
 
-    # timed(
-    #     mc_transform.transform_ipm_1240, # Function
-    #     layer.STAGING, # origin_layer
-    #     layer.STAGING, # target_layer
-    #     client_id, # client_id (bank)
-    #     file_id # file_id (md5)
-    # )
+    timed(
+        mc_transform.transform_ipm_1240, # Function
+        layer.STAGING, # origin_layer
+        layer.STAGING, # target_layer
+        client_id, # client_id (bank)
+        file_id # file_id (md5)
+    )
 
     timed(
         mc_extract.extract_1240_fields, 
@@ -170,11 +170,11 @@ def pipeline_mc_1740(client_id: str, file_id: str):
     )
 
 if __name__ == "__main__":
-    #client_id = "BRDRO"
-    #file_id = "e0cdccf3be383ecd2c8044b40c02be44"
+    client_id = "BRDRO"
+    file_id = "ba4a9711221a6b137c56ceb064f54a01"
 
-    client_id = "SBSA"
-    file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+    # client_id = "SBSA"
+    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
     
     # client_id = "BTRLRO"
     # file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
@@ -186,8 +186,8 @@ if __name__ == "__main__":
     # pipeline_visa_baseii(client_id, file_id)
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
-    # pipeline_mc_interpreter(client_id,file_id)
-    pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    pipeline_mc_interpreter(client_id,file_id)
+    #pipeline_mc_1240(client_id=client_id, file_id=file_id)
     # pipeline_mc_1644(client_id=client_id, file_id=file_id)
     # pipeline_mc_1740(client_id=client_id, file_id=file_id)
 

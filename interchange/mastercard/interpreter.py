@@ -106,6 +106,7 @@ def interpretate_msg(
     #6) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
     BATCH_SIZE = 50000  # 20 000
     schema = _canonical_schema_from_de_spec(DE_SPEC)
+
     writers: dict = {}  # key: (file_id, block, mti) -> ParquetWriter 
     block_state: dict[int, tuple[str, str]] = {}
 
@@ -115,7 +116,7 @@ def interpretate_msg(
     for start in range(0, n, BATCH_SIZE):
         base_chunk = df.iloc[start:start+BATCH_SIZE]
         base_chunk = base_chunk[base_chunk["block"].notna()]
-        
+
         if base_chunk.empty:
             continue
         

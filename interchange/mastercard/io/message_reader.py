@@ -65,5 +65,4 @@ def read_len_prefixed_messages(stream, *, as_hex: bool =True):
             rows.append(row)
 
         pos += 4 + msg_len
-
     return rows

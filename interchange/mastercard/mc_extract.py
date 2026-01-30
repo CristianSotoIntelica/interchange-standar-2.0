@@ -94,8 +94,8 @@ def extract_1240_fields(
         target_layer: FileStorage.Layer,
         client_id: str,
         file_id: str,
-        origin_sub_dir: str = "200_IPM_1240_EXT",
-        target_sub_dir: str = "300_IPM_1240_TRA",
+        origin_sub_dir: str = "200_IPM_1240_TRA",
+        target_sub_dir: str = "300_IPM_1240_EXT",
 ) -> None:
     
     log.logger.debug("Start Extract_1240_fields")
