@@ -232,10 +232,14 @@ class FileStorage:
     def build_target_name_from_raw_filepath(self, raw_filepath: str, mti: Optional[str] = None , fc: Optional[str] = None) -> str:
 
         stem = Path(raw_filepath).stem
+    
         #m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<block>\d+)_(?P<mti>\d{4})$", stem)
         print("STEM:", Path(raw_filepath).stem)
-        
-        if mti == "1644" and fc:
+       
+        path = Path(raw_filepath)
+        has_raw_layer = any("raw" in p.lower() for p in path.parts)
+
+        if mti == "1644" and not has_raw_layer and fc:
             m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<file_idn>[A-Za-z\d]{25})_(?P<mti>\d{4})_(?P<fc>\d{3})$", stem)
         else:
             m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<file_idn>[A-Za-z\d]{25})_(?P<mti>\d{4})$", stem)

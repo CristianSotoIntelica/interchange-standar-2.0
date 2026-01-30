@@ -1,12 +1,13 @@
 from interchange.logs.logger import Logger
 from interchange.persistence.file import FileStorage
-
+from interchange.mastercard.storage.extract_fc_1644_filepath import extract_fc_from_filepath
 
 import re
 from pathlib import Path
 from collections import defaultdict
 from interchange.persistence.database import Database
 import pandas as pd
+from interchange.mastercard.layouts.layout_1644 import extract_df_1644_by_fc, normalize_columns_1644
 
 log = Logger(__name__)
 fs = FileStorage()
@@ -39,10 +40,6 @@ def _load_mc_field_definitions() -> pd.DataFrame:
 
     return fd
 
-def extract_fc_from_filepath(filepath: str | Path) -> str:
-    name = Path(filepath).name
-    return name.rsplit("_", 1)[-1].replace(".parquet", "")
-
 def extract_1644_fields(
     origin_layer: FileStorage.Layer,
     target_layer: FileStorage.Layer,
@@ -73,11 +70,23 @@ def extract_1644_fields(
             continue
 
         df = fs.read_parquet_by_filepath(client_id=client_id, file_id=file_id, filepath=filepath)
-        df = df.rename(columns=rename_map)
+
+    
         df["FUNCTION_CODE"] = fc
 
+        if fc == '685':
+            df = extract_df_1644_by_fc(df, "685")
+        if fc  == '688':
+            df = extract_df_1644_by_fc(df, "688")
+        if fc == '691':
+            df = extract_df_1644_by_fc(df, "691")
+
+        df = df.rename(columns=rename_map)
+        
+        df = normalize_columns_1644(df)
+        
         out_fp = fs.build_target_parquet_filepath_from_raw(
-            raw_filepath=filepath,        # <- EL MISMO ARCHIVO
+            raw_filepath=filepath,        
             target_layer=target_layer,
             client_id=client_id,
             file_id=file_id,
