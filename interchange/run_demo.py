@@ -177,11 +177,11 @@ def pipeline_mc_1740(client_id: str, file_id: str):
     )
 
 if __name__ == "__main__":
-    client_id = "BRDRO"
-    file_id = "ba4a9711221a6b137c56ceb064f54a01"
+    # client_id = "BRDRO"
+    # file_id = "ba4a9711221a6b137c56ceb064f54a01"
 
-    # client_id = "SBSA"
-    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+    client_id = "SBSA"
+    file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
     
     # client_id = "BTRLRO"
     # file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming

@@ -1,6 +1,16 @@
 from interchange.logs.logger import Logger
 from interchange.persistence.file import FileStorage
 from interchange.mastercard.storage.extract_fc_1644_filepath import extract_fc_from_filepath
+from interchange.mastercard.extract.layout_keys import build_expected_keys
+from interchange.mastercard.extract.field_defs import build_rename_map
+from interchange.mastercard.extract.schema_validate import missing_layout_keys_in_parquet
+from interchange.mastercard.extract.schema_fill import fill_mising_from_db
+from interchange.mastercard.extract.nomalize import normalize_df_columns
+from interchange.mastercard.extract.reorder_cols import (
+    build_ordered_extract_names_from_layout_keys, reorder_df_columns
+)
+
+from interchange.mastercard.layouts.layout_1240 import DICT_DE_LYT_1240, DICT_PDS_LYT_1240
 
 import re
 from pathlib import Path
@@ -108,30 +118,45 @@ def extract_1240_fields(
 ) -> None:
     
     log.logger.debug("Start Extract_1240_fields")
-    
+
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer, 
         client_id=client_id,
         file_id=file_id,
         subdir=origin_sub_dir,
     )
+
+    db = Database()
+    rename_map = build_rename_map(db)
+
+    # 1) expected keys from layouts
+    keys_1240 = build_expected_keys(DICT_DE_LYT_1240, DICT_PDS_LYT_1240)
+
+    ordered_layout_cols = build_ordered_extract_names_from_layout_keys(db, keys_1240)
     
-
-    field_defs = _load_mc_field_definitions()
-
-    field_defs = field_defs.drop_duplicates(subset=["field_mc"], keep="first")
-
-    rename_map = field_defs.set_index("field_mc")["extract_name"].to_dict()
-
     for filepath in list_filepaths:
         
         df = fs.read_parquet_by_filepath(client_id=client_id, file_id=file_id, filepath=filepath)
+
+        # 1) Rename headers from parquet
         df = df.rename(columns=rename_map)
-        df.columns = (
-            df.columns
-            .str.strip()
-            .str.lower()
-            .str.replace(r"\s", "_", regex=True)
+
+        # 2) Normalice headers
+        df = normalize_df_columns(df)
+
+        # 3) Missings headers vs layout (list of missings headers)
+        missing = missing_layout_keys_in_parquet(df=df, expected_keys=keys_1240)
+
+        # 4) Completed headers missings 
+        if missing:
+            log.logger.warning(f"MTI: 1240 | missing layout fileds: {missing[:20]}{' ...' if len(missing) > 20 else ''}")
+            df = fill_mising_from_db(df, db, missing)
+
+        # 5) Reorder columns
+        df = reorder_df_columns(
+            df, 
+            ordered_layout_cols,
+            first_cols=["msg_no", "block", "mti", "enc", "function_code", "function_role", "parse_ok", "de_1"]
         )
         
         out_fp = fs.build_target_parquet_filepath_from_raw(
