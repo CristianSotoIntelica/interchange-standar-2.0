@@ -140,6 +140,14 @@ def pipeline_mc_1240(client_id: str, file_id: str):
         file_id # file_id (md5)
     )
 
+    timed(
+        mc_extract.extract_1240_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
+
 def pipeline_mc_1644(client_id: str, file_id: str):
 
     timed(
@@ -158,13 +166,13 @@ def pipeline_mc_1644(client_id: str, file_id: str):
         file_id # file_id (md5)
     )
 
-    timed(
-        mc_clean.clean_1644_fields,
-        layer.STAGING, 
-        layer.STAGING, 
-        client_id,
-        file_id 
-    )
+    # timed(
+    #     mc_clean.clean_1644_fields,
+    #     layer.STAGING, 
+    #     layer.STAGING, 
+    #     client_id,
+    #     file_id 
+    # )
 
 
 def pipeline_mc_1740(client_id: str, file_id: str):

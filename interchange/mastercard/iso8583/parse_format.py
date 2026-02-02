@@ -136,9 +136,6 @@ def build_wide_row(
         "parse_ok": parse_ok,
     }
 
-
-
-
     # si no parsea o no hay datos, devuelve solo la base
     if (not parse_ok) or (body_hex is None) or (not enc) or (bitmap_hex is None):
         return base
@@ -199,10 +196,10 @@ def build_wide_row(
 
         raw = body[pos:pos + ln]
         pos = pos + ln
-
+        
         col = cols[de]
 
-        if de in bin_:
+        if de in bin_: #DE 55
             base[col] = raw.hex()
         elif de in num:
             base[col] = decode_digits(raw, enc).strip()
@@ -213,6 +210,8 @@ def build_wide_row(
                 base[col] = raw.hex()
             elif unknown_mode == "bytes":
                 base[col] = raw
+            else:
+                base[col] = decode_text_best(raw, enc)
     return base
 
 def extract_de24_fast(
