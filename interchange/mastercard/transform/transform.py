@@ -53,7 +53,6 @@ def filter_df_columns_de( df: pd.DataFrame, mti: str) -> pd.DataFrame:
         [c for c in base_cols if c in df.columns] +
         [c for c in dict_de.keys() if c in df.columns]
     )
-    #print(df[cols_to_keep].columns)
     
     return df[cols_to_keep]
 

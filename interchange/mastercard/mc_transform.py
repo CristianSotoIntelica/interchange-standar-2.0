@@ -78,8 +78,6 @@ def transform_ipm_1644(
         df = fs.read_parquet_by_filepath(client_id=client_id, file_id=file_id, filepath=filepath)
 
         df_de_only = filter_df_columns_de(df=df, mti = '1644')
-        
-        #print(df_de_only.columns)
     
         dfs = apply_pds_for_mti_1644_split(df_de_only)
 
@@ -98,7 +96,6 @@ def transform_ipm_1644(
         if df_691 is not None and not df_691.empty:
             out_fp = fs.build_target_parquet_filepath_from_raw(raw_filepath=filepath,target_layer=target_layer,client_id=client_id,file_id=file_id,target_subdir=target_subir, mti= '1644', fc='691')
             fs.write_parquet_by_filepath(df_691, out_fp, index=False)
-
 
 def transform_ipm_1740(
         origin_layer: FileStorage.Layer, target_layer: FileStorage.Layer, 

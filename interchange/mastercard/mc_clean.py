@@ -11,7 +11,7 @@ from decimal import Decimal, InvalidOperation
 
 from interchange.persistence.database import Database
 from interchange.mastercard.storage.extract_fc_1644_filepath import extract_fc_from_filepath
-
+from interchange.mastercard.clean.fields_dtype_def import cast_df_from_params_def, build_arrow_schema_from_params
 
 log = Logger(__name__)
 fs = FileStorage()
@@ -139,7 +139,7 @@ def cast_df_from_param(
             # Log pro: detecta valores no nulos que terminaron NULL por parsing inválido
             bad = int(src.notna().sum() - pd.Series(converted).notna().sum())
             if bad > 0:
-                log.warning(f"[cast_df_from_param] Columna '{col}' tuvo {bad} valores inválidos -> NULL")
+                log.logger.warning(f"[cast_df_from_param] Columna '{col}' tuvo {bad} valores inválidos -> NULL")
 
             out[col] = converted
 
@@ -212,8 +212,8 @@ def clean_1644_fields(
     target_layer: FileStorage.Layer,
     client_id: str,
     file_id: str,
-    origin_sub_dir: str = "200_IPM_1644_EXT",
-    target_subdir: str = "200_IPM_1644_CLN",
+    origin_sub_dir: str = "300_IPM_1644_EXT",
+    target_subdir: str = "400_IPM_1644_CLN",
 ) -> None:
 
     list_filepaths = fs.get_list_files_folderpath(
@@ -255,3 +255,53 @@ def clean_1644_fields(
 
         fs.write_parquet_by_filepath(df_cast, out_fp, index=False, schema=schema)
         #inspect_parquet_schema(out_fp)
+
+def clean_1240_fields(
+        origin_layer: FileStorage.Layer,
+        target_layer: FileStorage.Layer,
+        client_id: str,
+        file_id: str,
+        origin_sub_dir: str = "300_IPM_1240_EXT",
+        target_sub_dir: str = "400_IPM_1240_CLN",
+) -> None:
+        
+    list_filepaths = fs.get_list_files_folderpath(
+        layer=origin_layer,
+        client_id=client_id,
+        file_id=file_id,
+        subdir=origin_sub_dir
+    )
+
+    fields_def = _load_mc_field_dtype_definitions()
+
+    for filepath in list_filepaths:
+        df = fs.read_parquet_by_filepath(
+            client_id=client_id, 
+            file_id=file_id, 
+            filepath=filepath
+            )
+        
+        df_cast = cast_df_from_params_def(
+            df=df,
+            param=fields_def,
+            date_format="%y%m%d",
+            timestamp_format="%y%m%d%H%M%S",
+        )
+
+        out_fp = fs.build_target_parquet_filepath_from_raw(
+            raw_filepath=filepath,
+            target_layer=target_layer,
+            client_id=client_id,
+            file_id=file_id,
+            target_subdir=target_sub_dir,
+            mti="1240"
+        )
+
+        schema = build_arrow_schema_from_params(
+            param=fields_def,
+            default_decimal_precision=18,
+            default_decimal_scale=2,
+            timestamp_unit="ns",
+        )   
+            
+        fs.write_parquet_by_filepath(df_cast, out_fp, index=False, schema=schema)

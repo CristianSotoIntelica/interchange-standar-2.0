@@ -2,7 +2,7 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from interchange.persistence.file import FileStorage
 from interchange.visa import transform, extract, clean, calculate, interchange, store
-from interchange.mastercard import interpreter, mc_transform, mc_extract
+from interchange.mastercard import interpreter, mc_transform, mc_extract, mc_clean
 from pathlib import Path
 import gc
 import time  # <-- añadimos time
@@ -55,7 +55,6 @@ def pipeline_visa_sms(client_id, file_id):
     timed(store.store_sms_file, layer.STAGING, layer.OPERATIONAL, client_id, file_id)
     gc.collect()
 
-
 def pipeline_visa_baseii(client_id, file_id):
     timed(
         transform.transform_baseii_drafts,
@@ -94,7 +93,6 @@ def pipeline_visa_baseii(client_id, file_id):
 
     timed(store.store_baseii_file, layer.STAGING, layer.OPERATIONAL, client_id, file_id)
     gc.collect()
-
 
 def pipeline_visa_vss(client_id, file_id):
     timed(
@@ -148,6 +146,14 @@ def pipeline_mc_1240(client_id: str, file_id: str):
         file_id, # file_id (md5)
     )
 
+    timed(
+        mc_clean.clean_1240_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
+
 def pipeline_mc_1644(client_id: str, file_id: str):
 
     timed(
@@ -166,14 +172,13 @@ def pipeline_mc_1644(client_id: str, file_id: str):
         file_id # file_id (md5)
     )
 
-    # timed(
-    #     mc_clean.clean_1644_fields,
-    #     layer.STAGING, 
-    #     layer.STAGING, 
-    #     client_id,
-    #     file_id 
-    # )
-
+    timed(
+        mc_clean.clean_1644_fields,
+        layer.STAGING, 
+        layer.STAGING, 
+        client_id,
+        file_id 
+    )
 
 def pipeline_mc_1740(client_id: str, file_id: str):
 
@@ -194,17 +199,11 @@ def pipeline_mc_1740(client_id: str, file_id: str):
     )
 
 if __name__ == "__main__":
-    client_id = "BRDRO"
-    file_id = "e0cdccf3be383ecd2c8044b40c02be44"
-
-    #client_id = "SBSA"
-    #file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+    # client_id = "SBSA"
+    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
     
     client_id = "BTRLRO"
-    file_id = "e95a9221d9d5925feee4e1c0a3454549"
-
-    # client_id = "BTRLRO"
-    # file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
+    file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
     # file_id = "3bbe11a245223ecb2ebfb46b6d2c9f36" # incoming
     # file_id = "927e539ab0e66cbcf48cd6043cac1d47" # outgoing (block)
     # file_id = "28ef73ae78c526c130fccb618a581359" # outgoing (no block)
@@ -214,16 +213,11 @@ if __name__ == "__main__":
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
     
-    #pipeline_mc_interpreter(client_id,file_id)
-    #pipeline_mc_1240(client_id=client_id, file_id=file_id)
-    pipeline_mc_1644(client_id=client_id, file_id=file_id)
+    pipeline_mc_interpreter(client_id,file_id)
+    pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    #pipeline_mc_1644(client_id=client_id, file_id=file_id)
     #pipeline_mc_1740(client_id=client_id, file_id=file_id)
     
-    #pipeline_mc_interpreter(client_id,file_id)
-    # pipeline_mc_1240(client_id=client_id, file_id=file_id)
-    # pipeline_mc_1644(client_id=client_id, file_id=file_id)
-    # pipeline_mc_1740(client_id=client_id, file_id=file_id)
-
     #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():
         print(f"{func_name}: {t:.2f} s")

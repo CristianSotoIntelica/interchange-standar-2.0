@@ -216,7 +216,7 @@ def wanted_pds_tags_1644(function_code: str) -> set[int]:
 
     tags = PDS_TAGS_BY_FUNCTION_CODE_1644.get(fc)
     if tags:
-        #print(tags) devuelve todos los pds que se van usar de acuerdo al function code
+        # devuelve todos los pds que se van usar de acuerdo al function code
         return tags 
     
 

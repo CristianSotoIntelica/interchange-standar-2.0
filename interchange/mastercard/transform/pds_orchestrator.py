@@ -233,7 +233,6 @@ def apply_pds_for_mti_1644_split(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         fc_str = str(fc)
 
         tags = wanted_pds_tags_1644(fc_str) #trae los tags (pds) que se van a usar de acuerdo al function code
-        #print(list(tags))
         pds_layout_fc = pds_layout_1644_for_tags(tags) #traer los pds que se usaran
 
         g2 = extract_pds_columns_from_containers_fast(

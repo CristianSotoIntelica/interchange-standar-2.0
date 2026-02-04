@@ -226,24 +226,9 @@ class FileStorage:
         # Devolver el resultado
         return [str(file) for file in results]
 
-    # def build_target_name_from_raw_filepath(self, raw_filepath: str, mti: str, fc: str) -> str:
-    #     stem = Path(raw_filepath).stem
-
-    #     m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<block>\d+)_(?P<mti>\d{4})$", stem)
-        
-    #     if m:
-    #         if mti == '1644':
-    #             return f"{m.group('md5')}_{m.group('block')}_{m.group('mti')}_{fc}.parquet"
-    #         return f"{m.group('md5')}_{m.group('block')}_{m.group('mti')}.parquet"
-
-    #     raise ValueError(f"No reconozco nomenclatura del parquet raw: {Path(raw_filepath).name}")
-
     def build_target_name_from_raw_filepath(self, raw_filepath: str, mti: Optional[str] = None , fc: Optional[str] = None) -> str:
 
         stem = Path(raw_filepath).stem
-    
-        #m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<block>\d+)_(?P<mti>\d{4})$", stem)
-        print("STEM:", Path(raw_filepath).stem)
        
         path = Path(raw_filepath)
         has_raw_layer = any("raw" in p.lower() for p in path.parts)
@@ -252,8 +237,6 @@ class FileStorage:
             m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<file_idn>[A-Za-z\d]{25})_(?P<mti>\d{4})_(?P<fc>\d{3})$", stem)
         else:
             m = re.match(r"^(?P<md5>[0-9a-fA-F]{32})_(?P<file_idn>[A-Za-z\d]{25})_(?P<mti>\d{4})$", stem)
-        #if not m:
-        #    raise ValueError(f"No reconozco nomenclatura del parquet raw: {Path(raw_filepath).name}")
 
         md5 = m.group("md5")
         #block = m.group("block")
