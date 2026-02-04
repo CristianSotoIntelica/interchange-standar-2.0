@@ -11,6 +11,7 @@ from interchange.mastercard.extract.reorder_cols import (
 )
 
 from interchange.mastercard.layouts.layout_1240 import DICT_DE_LYT_1240, DICT_PDS_LYT_1240
+from interchange.mastercard.layouts.layout_1740 import DICT_DE_LYT_1740, DICT_PDS_LYT_1740
 
 from interchange.persistence.database import Database
 import pandas as pd
@@ -132,7 +133,8 @@ def extract_1644_fields(
         
         # 7) Normalize final columns (semantic renames + lowercase)
         df = normalize_columns_1644(df)
-        
+        df = normalize_df_columns(df)
+
         # 8) Write parquet
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,        
@@ -241,6 +243,69 @@ def extract_1240_fields(
             file_id=file_id,
             target_subdir=target_sub_dir,
             mti="1240",
+        )
+
+        fs.write_parquet_by_filepath(df, out_fp, index=False)
+
+
+def extract_1740_fields(
+        origin_layer: FileStorage.Layer,
+        target_layer: FileStorage.Layer,
+        client_id: str,
+        file_id: str,
+        origin_sub_dir: str = "200_IPM_1740_TRA",
+        target_sub_dir: str = "300_IPM_1740_EXT",
+) -> None:
+    
+    log.logger.debug("Start Extract_1740_fields")
+
+    list_filepaths = fs.get_list_files_folderpath(
+        layer=origin_layer, 
+        client_id=client_id,
+        file_id=file_id,
+        subdir=origin_sub_dir,
+    )
+
+    db = Database()
+    rename_map = build_rename_map(db)
+
+    # 1) expected keys from layouts
+    keys_1740 = build_expected_keys(DICT_DE_LYT_1740, DICT_PDS_LYT_1740)
+
+    ordered_layout_cols = build_ordered_extract_names_from_layout_keys(db, keys_1740)
+    
+    for filepath in list_filepaths:
+        
+        df = fs.read_parquet_by_filepath(client_id=client_id, file_id=file_id, filepath=filepath)
+
+        # 1) Rename headers from parquet
+        df = df.rename(columns=rename_map)
+
+        # 2) Normalice headers
+        df = normalize_df_columns(df)
+
+        # 3) Missings headers vs layout (list of missings headers)
+        missing = missing_layout_keys_in_parquet(df=df, expected_keys=keys_1740)
+
+        # 4) Completed headers missings 
+        if missing:
+            log.logger.warning(f"MTI: 1740 | missing layout fileds: {missing[:20]}{' ...' if len(missing) > 20 else ''}")
+            df = fill_mising_from_db(df, db, missing)
+
+        # 5) Reorder columns
+        df = reorder_df_columns(
+            df, 
+            ordered_layout_cols,
+            first_cols=["msg_no", "block", "mti", "enc", "function_code", "function_role", "parse_ok", "de_1"]
+        )
+        
+        out_fp = fs.build_target_parquet_filepath_from_raw(
+            raw_filepath=filepath,
+            target_layer=target_layer,
+            client_id=client_id,
+            file_id=file_id,
+            target_subdir=target_sub_dir,
+            mti="1740",
         )
 
         fs.write_parquet_by_filepath(df, out_fp, index=False)

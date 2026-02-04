@@ -11,6 +11,10 @@ from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
 from pathlib import Path
 
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 log = Logger(__name__)
 
 
@@ -176,12 +180,17 @@ class FileStorage:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         data.to_parquet(filepath, index=True)
 
-    def write_parquet_by_filepath(
-            self, data: pd.DataFrame, filepath: str, index: bool = False ) -> None:
+    def write_parquet_by_filepath(self, data: pd.DataFrame, filepath: str, index: bool = False, *,   schema: pa.Schema | None = None, compression: str = "snappy",) -> None:
         p = Path(filepath)
         os.makedirs(p.parent, exist_ok=True)
-        data.to_parquet(p, index=index)
-
+        if schema is None:
+            data.to_parquet(p, index=index)
+            return 
+        present = set(data.columns)
+        schema_filtered = pa.schema([f for f in schema if f.name in present])
+        table = pa.Table.from_pandas(data, schema=schema_filtered, preserve_index=index)
+        pq.write_table(table, p, compression=compression)
+        
     def read_parquet_by_filepath(
             self, client_id: str, file_id: str, filepath: str) -> pd.DataFrame:
 
