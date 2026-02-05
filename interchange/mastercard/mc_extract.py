@@ -73,7 +73,7 @@ def extract_1644_fields(
     client_id: str,
     file_id: str,
     origin_sub_dir: str = "200_IPM_1644_TRA",
-    target_subdir: str = "300_IPM_1644_EXT",
+    target_sub_dir: str = "300_IPM_1644_EXT",
     ) -> None:
     """
     Extract and standarize MTI 1644 parquet files for supported Function Codes (FC).
@@ -141,7 +141,7 @@ def extract_1644_fields(
             target_layer=target_layer,
             client_id=client_id,
             file_id=file_id,
-            target_subdir=target_subdir,
+            target_subdir=target_sub_dir,
             mti="1644",
             fc=fc,
         )
