@@ -119,6 +119,7 @@ DICT_DE_LYT_1240 = {
 TUPLE_DE_PDS_LYT_1240 = ("DE_48", "DE_62", "DE_123", "DE_124", "DE_125")
 
 BASE_COLS_1240 = [
+    "FILE_IDN",
     "MSG_NO",
     "BLOCK",
     "MTI",

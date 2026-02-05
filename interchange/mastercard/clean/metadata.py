@@ -9,7 +9,7 @@ def base_clean_param() -> pd.DataFrame:
             {"extract_name": "file_dt", "data_type": "string"},
             {"extract_name": "type_mti", "data_type": "string"},
             {"extract_name": "ref_id", "data_type": "int64"},
-            {"extract_name": "function_code", "data_type": "int32"},
+            {"extract_name": "function_code", "data_type": "int64"},
         ]
     )
 

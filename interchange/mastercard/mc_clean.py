@@ -68,13 +68,6 @@ def clean_1644_fields(
     field_defs = load_mc_field_dtype_definitions()
     field_defs = extend_field_defs_with_base_cols(field_defs)
     
-    schema = build_arrow_schema_from_params(
-            field_defs,
-            default_decimal_precision=18,
-            default_decimal_scale=2,
-            timestamp_unit="ns",
-    )
-    
     for filepath in list_filepaths:
         fc = extract_fc_from_filepath(filepath)
 
@@ -91,7 +84,16 @@ def clean_1644_fields(
             df=df, 
             param=field_defs
         )
-       
+
+        
+        schema = build_arrow_schema_from_params(
+            field_defs,
+            ordered_cols=list(df_cast.columns),  
+            default_decimal_precision=18,
+            default_decimal_scale=2,
+            timestamp_unit="ns",
+         )
+
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,        
             target_layer=target_layer,
@@ -206,7 +208,7 @@ def clean_1240_fields(
 
 def clean_1442_fields(
         origin_layer: FileStorage.Layer,
-        target_layer: FileStorage.Layer,
+        target_layer: FileStorage.Layer,    
         client_id: str,
         file_id: str,
         origin_sub_dir: str = "300_IPM_1442_EXT",
