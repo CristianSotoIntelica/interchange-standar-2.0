@@ -5,25 +5,56 @@ import pandas as pd
 import pyarrow as pa
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any, Mapping, cast, Hashable
+from typing import Any, Hashable
 
 from interchange.persistence.database import Database
 
 log = Logger(__name__)
 
 def quantize_decimal(d: Decimal, scale: int) -> Decimal:
+    """
+    Quantize a Decimal to a fixed number of fractional digits.
+
+    Parameters
+    ----------
+    d : Decimal 
+        Input decimal value.
+    scale: int
+        Number of decimal places to keep.
+
+    Returns
+    -------
+    Decimal
+        Quantized value using ROUND_HALF_UP.
+    """
     q = Decimal(1).scaleb(-scale)
     return d.quantize(q, rounding=ROUND_HALF_UP)
 
 def to_implied_decimal(x, scale: int) -> Optional[Decimal]:
     """
-    Convierte un valor que viene como dígitos (sin punto decimal) a Decimal aplicando implied decimals:
-      scale=2  -> divide entre 10^2 (=100)
-      scale=3  -> divide entre 10^3 (=1000)
-      scale=0  -> no divide
+    Convert a digit-only amount to Decimal applying implied decimals.
 
-    Nota: si el valor ya trae punto (ej "12.34"), se deja tal cual para evitar doble-escala.
-          Si quieres modo estricto (nunca viene con punto), quita esa condición.
+    Examples
+    --------
+    scale=2: "1234" -> Decimal("12.34")
+    scale=0: "1234" -> Decimal("1234")
+
+    Parameters
+    ----------
+    x: Any
+        Input value (string/number). Empty/NA is treated as null.
+    scale: int
+        Implied decimals scale.
+
+    Returns
+    -------
+    Decimal | None
+        Converted Decimal, or None if value is null/invalid.
+
+    Notes
+    -----
+    If the input already contains a decimal point (e.g. "12.34"), it is returned as-is 
+    to avoid double scaling.
     """
     if x is None or x == "" or pd.isna(x):
         return None
@@ -41,7 +72,32 @@ def to_implied_decimal(x, scale: int) -> Optional[Decimal]:
         d = d.scaleb(-scale)  # exacto: mueve el punto a la izquierda
     return d
 
-def to_scale_prefixed_decimal(x, *, out_scale: Optional[int] = None) -> Optional[Decimal]:
+def to_scale_prefixed_decimal(
+        x: Any, *, out_scale: Optional[int] = None
+) -> Optional[Decimal]:
+    """
+    Parse Mastercard "scale-prefixed" numeric representation into Decimal.
+
+    The value is encoded as:
+    - first digit = exponent (number of decimal places)
+    - remaining digits = mantissa
+
+    Example
+    -------
+    "212345" -> exponent=2, mantissa=12345 -> Decimal("123.45")
+
+    Parameters
+    ----------
+    x : Any
+        Raw value (string/number). Empty/NA returns None.
+    out_scale : int | None, optional
+        If provided, quantize output to this scale using ROUND_HALF_UP.
+
+    Returns
+    -------
+    Decimal | None
+        Parsed decimal value or None if invalid.
+    """
     if x is None or x == "" or pd.isna(x):
         return None
     
@@ -73,6 +129,28 @@ def to_scale_prefixed_decimal(x, *, out_scale: Optional[int] = None) -> Optional
     return d
 
 def load_currency_decimals_map(db: Database) -> dict[str, int | None]:
+    """
+    Load currency decimals configuration from DB.
+
+    Parameters
+    ----------
+    db : Database
+        Database handle used to read the "currency" table.
+
+    Returns
+    -------
+    dict[str, int | None]
+        Mapping currency_numeric_code (zero-padded to 3) -> decimals (or None if missing).
+
+    Side effects
+    ------------
+    Reads the "currency" table from the database.
+
+    Raises
+    ------
+    TypeError
+        If db.read_records() does not return a pandas DataFrame.
+    """
     rows = db.read_records(
         table_name="currency",
         fields=["currency_numeric_code", "currency_decimal_separator"],
@@ -101,6 +179,30 @@ def convert_dynamic_implied_amount(
     default_decimals: int,
     out_scale: int,
 ) -> Optional[Decimal]:
+    """
+    Convert a digits-only amount to Decimal using per-row decimals.
+
+    Parameters
+    ----------
+    amount_str : Any
+        Amount string (digits, optional leading '-'). Empty/NA -> None.
+    decimals : Any
+        Decimals for this row (may be None/NA). If missing, default_decimals is used.
+    default_decimals : int
+        Fallback decimals when `decimals` cannot be resolved.
+    out_scale : int
+        Quantize output to this scale.
+
+    Returns
+    -------
+    Decimal | None
+        Converted and quantized Decimal, or None if invalid.
+
+    Notes
+    -----
+    - Rejects non-digit amounts (after stripping sign).
+    - Applies ROUND_HALF_UP quantization.
+    """
     
     if amount_str is None or pd.isna(amount_str):
         return None
@@ -138,6 +240,69 @@ def cast_df_from_params_def(
         dynamic_decimal_out_scale: int = 4,
         currency_decimals_map: Optional[dict[str, int | None]] = None,
 ) -> pd.DataFrame:
+    """
+    Cast DataFrame columns based on metadata definitions.
+
+    Steps
+    -----
+    1) Normalize metadata (`param`) to extract (extract_name, data_type, float_decimals).
+    2) For each metadata row:
+       - If the column exists in `df`, cast according to data_type.
+       - Decimal columns use float_decimals scale flags (see Notes).
+    3) If dynamic decimal fields (-2/-3/-4) are present:
+       - Resolve per-row decimals via currency codes and the currency table.
+       - Convert and quantize to `dynamic_decimal_out_scale`.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame (typically from extracted parquet).
+    param : pd.DataFrame
+        Metadata table with at least columns: extract_name, data_type.
+        Optional: float_decimals.
+    date_format : str, default "%Y%m%d"
+        Format for 'date' columns (used with pd.to_datetime).
+    timestamp_format : str | None, default None
+        Format for 'timestamp' columns. If provided, values are normalized then parsed with this format.
+    default_decimal_scale : int, default 2
+        Default implied decimals scale for decimal fields when float_decimals is missing/NA.
+    conversion_rate_scale : int, default 9
+        Output scale for scale-prefixed decimals (float_decimals == -1).
+    dynamic_decimal_out_scale : int, default 4
+        Output scale for dynamic decimals (float_decimals in {-2,-3,-4}).
+    currency_decimals_map : dict[str, int | None] | None, default None
+        Optional cache mapping currency codes -> decimals. If None and dynamic decimals exist,
+        the function loads it from DB.
+
+    Returns
+    -------
+    pd.DataFrame
+        A new DataFrame with casted columns.
+
+    Side effects
+    ------------
+    - Emits warnings through logger when values cannot be parsed (coerced to null).
+    - May read the currency table from DB if dynamic decimals are required and
+      `currency_decimals_map` is not provided.
+
+    Notes
+    -----
+    Supported `data_type` values:
+    - "int64": cast to pandas nullable Int64
+    - "string": cast to pandas string dtype
+    - "timestamp": datetime64 (format-driven if timestamp_format provided)
+    - "date": python date objects (parsed with date_format)
+    - "time": stored as "HH:MM:SS" string, padded to 6 digits
+    - "decimal": Decimal with scale rules driven by float_decimals
+
+    float_decimals flags for decimals:
+    - >= 0: implied decimals scale (to_implied_decimal)
+    - -1: scale-prefixed decimals (to_scale_prefixed_decimal), quantized to conversion_rate_scale
+    - -2/-3/-4: dynamic decimals based on currency code columns:
+        -2 -> currency_code_transaction_de_49
+        -3 -> currency_code_reconciliation_de_50
+        -4 -> currency_code_cardholder_billing_de_51
+    """
     
     out = df.copy()
 
@@ -297,6 +462,41 @@ def build_arrow_schema_from_params(
     conversion_rate_scale: int = 9,
     timestamp_unit: str = "ns",
 ) -> pa.Schema:
+    """
+    Build a PyArrow schema that matches metadata-driven casting rules.
+
+    Steps
+    -----
+    1) Normalize metadata (`param`) to extract (extract_name, data_type, float_decimals).
+    2) Map each (data_type, float_decimals) into a PyArrow field.
+    3) Return a schema with stable ordering defined by `param`.
+
+    Parameters
+    ----------
+    param : pd.DataFrame
+        Metadata table with at least columns: extract_name, data_type.
+        Optional: float_decimals.
+    default_decimal_precision : int, default 18
+        Precision for Arrow decimal128.
+    default_decimal_scale : int, default 2
+        Default scale used when float_decimals is missing/NA.
+    conversion_rate_scale : int, default 9
+        Scale used when float_decimals == -1 (conversion rate).
+    timestamp_unit : str, default "ns"
+        Timestamp unit for Arrow timestamps.
+
+    Returns
+    -------
+    pa.Schema
+        Arrow schema aligned with casting rules.
+
+    Notes
+    -----
+    Decimal scale handling:
+    - float_decimals == -1     -> decimal128(precision, conversion_rate_scale)
+    - float_decimals in -2/-3/-4 -> decimal128(precision, 4)
+    - else                    -> decimal128(precision, scale)
+    """
     
     cols = ["extract_name", "data_type"]
     has_scale = "float_decimals" in param.columns
@@ -348,29 +548,3 @@ def build_arrow_schema_from_params(
             fields.append(pa.field(col, pa.string()))
 
     return pa.schema(fields)
-
-def resolve_decimals_from_scale_flag(
-        scale_flag: int | None,
-        row: dict,
-        currency_decimals: dict[str, int | None],
-) -> int | None:
-    
-    if scale_flag is None:
-        return None
-    if scale_flag >= 0:
-        return scale_flag
-    
-    if scale_flag == -2:
-        code = row.get("currency_code_transaction_de_49")
-    elif scale_flag == -3:
-        code = row.get("currency_code_reconciliation_de_50")
-    elif scale_flag == -4:
-        code = row.get("currency_code_cardholder_billing_de_51")
-    else:
-        return None
-    
-    if code is None:
-        return None
-    
-    code = str(code).zfill(3)
-    return currency_decimals.get(code)
