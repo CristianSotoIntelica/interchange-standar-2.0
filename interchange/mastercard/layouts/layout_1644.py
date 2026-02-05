@@ -191,12 +191,14 @@ BASE_COLS_1644 = [
 BASE_COLS_1644_EXTRACT = [
     "FILE_IDN", 
     "FILE_DT", 
+    "MTI",
     "MSG_NO", 
     "FUNCTION_CODE", 
 ]
 
 RENAME_COLS_1644 = {
     "MSG_NO": "ref_id",
+    "MTI": "type_mti"
 }
 
  # Tags PDS qie se esperan por Function Code en MTI 1644
