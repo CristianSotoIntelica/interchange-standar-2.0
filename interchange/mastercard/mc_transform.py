@@ -39,6 +39,12 @@ def transform_ipm_1240(
         # 5) Logica los PDS y los PDS subfields
         df_expand = apply_pds_for_mti(df=df_expand, mti = '1240')
 
+        # 5.1) Rename
+        df_expand = df_expand.rename(columns={
+            "MSG_NO": "ref_id",
+            "MTI": "type_mti",
+        })
+
         # 6) Generar parquets
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath, target_layer=target_layer, client_id=client_id,
@@ -71,6 +77,12 @@ def transform_ipm_1442(
 
         # 5) Logica los PDS y los PDS subfields
         df_expand = apply_pds_for_mti(df=df_expand, mti = '1442')
+
+        # 5.1) Rename
+        df_expand = df_expand.rename(columns={
+            "MSG_NO": "ref_id",
+            "MTI": "type_mti",
+        })
 
         # 6) Generar parquets
         out_fp = fs.build_target_parquet_filepath_from_raw(
@@ -141,8 +153,13 @@ def transform_ipm_1740(
         # 5) Logica los PDS y los PDS subfields
         df_expand = apply_pds_for_mti(df=df_expand, mti = '1740')
 
-        # 6) Generar parquets
+         # 5.1) Rename
+        df_expand = df_expand.rename(columns={
+            "MSG_NO": "ref_id",
+            "MTI": "type_mti",
+        })
 
+        # 6) Generar parquets
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath, target_layer=target_layer, client_id=client_id,
             file_id=file_id, target_subdir=target_sub_dir

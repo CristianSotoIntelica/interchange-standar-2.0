@@ -70,13 +70,20 @@ DICT_DE_LYT_1740 = {
 
 TUPLE_DE_PDS_LYT_1740 = ("DE_48",)
 
+# BASE_COLS_1740 = [
+#     "MSG_NO",
+#     "BLOCK",
+#     "MTI",
+#     "ENC",
+#     "FUNCTION_CODE",
+#     "FUNCTION_ROLE",
+#     "PARSE_OK",
+#     "DE_1",
+# ]
+
 BASE_COLS_1740 = [
+    "FILE_IDN",
+    "FILE_DT",
     "MSG_NO",
-    "BLOCK",
     "MTI",
-    "ENC",
-    "FUNCTION_CODE",
-    "FUNCTION_ROLE",
-    "PARSE_OK",
-    "DE_1",
 ]
