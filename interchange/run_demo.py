@@ -154,6 +154,32 @@ def pipeline_mc_1240(client_id: str, file_id: str):
         file_id, # file_id (md5)
     )
 
+def pipeline_mc_1442(client_id: str, file_id: str):
+
+    timed(
+        mc_transform.transform_ipm_1442, # Function
+        layer.STAGING, # origin_layer
+        layer.STAGING, # target_layer
+        client_id, # client_id (bank)
+        file_id # file_id (md5)
+    )
+
+    timed(
+        mc_extract.extract_1442_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
+
+    timed(
+        mc_clean.clean_1442_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
+
 def pipeline_mc_1644(client_id: str, file_id: str):
 
     timed(
@@ -213,10 +239,11 @@ if __name__ == "__main__":
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
     
-    pipeline_mc_interpreter(client_id,file_id)
-    pipeline_mc_1240(client_id=client_id, file_id=file_id)
-    pipeline_mc_1644(client_id=client_id, file_id=file_id)
-    pipeline_mc_1740(client_id=client_id, file_id=file_id)
+    # pipeline_mc_interpreter(client_id,file_id)
+    # pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    pipeline_mc_1442(client_id=client_id, file_id=file_id)
+    # pipeline_mc_1644(client_id=client_id, file_id=file_id)
+    # pipeline_mc_1740(client_id=client_id, file_id=file_id)
     
     #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():

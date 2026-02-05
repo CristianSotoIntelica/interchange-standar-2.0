@@ -31,29 +31,46 @@ def transform_ipm_1240(
 
         df_de_only = filter_df_columns_de(df=df, mti = '1240')
 
-        # log.logger.debug(
-        #     f"Read parquet before DE filter:     {filepath} | rows = {len(df_de_only)} | cols: {len(df_de_only.columns)}\n"
-        # )
-
         # 4) Expandir los DE por subfields según el layout del mensaje
         df_expand = expand_subfields(df=df_de_only, mti='1240')
 
-        # log.logger.debug(
-        #     f"Read parquet DE subfields:         {filepath} | rows = {len(df_expand)} | cols: {len(df_expand.columns)}\n"
-        # )        
-
         df_expand = reorder_with_subfield(df=df_expand, mti='1240')
-
-        # log.logger.debug(
-        #     f"Read parquet reorder DE:           {filepath} | rows = {len(df_expand)} | cols: {len(df_expand.columns)}\n"
-        # )
 
         # 5) Logica los PDS y los PDS subfields
         df_expand = apply_pds_for_mti(df=df_expand, mti = '1240')
 
-        # log.logger.debug(
-        #     f"Read parquet PDS + subfields:      {filepath} | rows = {len(df_expand)} | cols: {len(df_expand.columns)}\n"
-        # )
+        # 6) Generar parquets
+        out_fp = fs.build_target_parquet_filepath_from_raw(
+            raw_filepath=filepath, target_layer=target_layer, client_id=client_id,
+            file_id=file_id, target_subdir=target_sub_dir
+        )
+
+        fs.write_parquet_by_filepath(df_expand, out_fp, index=False)
+
+def transform_ipm_1442(
+        origin_layer: FileStorage. Layer, target_layer: FileStorage.Layer, 
+        client_id: str, file_id: str, origin_sub_dir: str="100_IPM_1442_RAW", 
+        target_sub_dir: str="200_IPM_1442_TRA",
+) -> None:
+
+    # 1) Obtener lista de parquets derivados
+    list_filepaths = fs.get_list_files_folderpath(
+        layer=origin_layer, client_id=client_id, file_id=file_id, subdir=origin_sub_dir)
+    
+    # 2) Iterar la lista para leer los parquets
+    for filepath in list_filepaths:
+        df = fs.read_parquet_by_filepath(
+        client_id=client_id, file_id=file_id, filepath=filepath)
+
+        df_de_only = filter_df_columns_de(df=df, mti = '1442')
+
+        # 4) Expandir los DE por subfields según el layout del mensaje
+        df_expand = expand_subfields(df=df_de_only, mti='1442')
+
+        df_expand = reorder_with_subfield(df=df_expand, mti='1442')
+
+        # 5) Logica los PDS y los PDS subfields
+        df_expand = apply_pds_for_mti(df=df_expand, mti = '1442')
 
         # 6) Generar parquets
         out_fp = fs.build_target_parquet_filepath_from_raw(
@@ -86,7 +103,6 @@ def transform_ipm_1644(
         df_688 = dfs.get("688")
         df_691= dfs.get("691")
 
-       
         # 6) Generar parquets
         if df_685 is not None and not df_685.empty:
             out_fp = fs.build_target_parquet_filepath_from_raw(raw_filepath=filepath,target_layer=target_layer,client_id=client_id,file_id=file_id,target_subdir=target_sub_dir, mti= '1644', fc='685')

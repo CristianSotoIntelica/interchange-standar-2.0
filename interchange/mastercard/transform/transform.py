@@ -14,6 +14,14 @@ from interchange.mastercard.layouts.layout_1240 import (
     TUPLE_DE_PDS_LYT_1240,
 )
 
+from interchange.mastercard.layouts.layout_1442 import (
+    PdsLayout,
+    DICT_DE_LYT_1442,
+    DICT_PDS_LYT_1442,
+    BASE_COLS_1442,
+    TUPLE_DE_PDS_LYT_1442,
+)
+
 from interchange.mastercard.layouts.layout_1644 import (
     PdsLayout,
     DICT_DE_LYT_1644,
@@ -37,6 +45,8 @@ def get_layouts_by_mti(mti: str) -> tuple[dict, dict, list[str], tuple]:
     """
     if mti == "1240":
         return DICT_DE_LYT_1240, DICT_PDS_LYT_1240, BASE_COLS_1240, TUPLE_DE_PDS_LYT_1240
+    if mti == "1442":
+        return DICT_DE_LYT_1442, DICT_PDS_LYT_1442, BASE_COLS_1442, TUPLE_DE_PDS_LYT_1442
     elif mti == "1644":
         return DICT_DE_LYT_1644, DICT_PDS_LYT_1644, BASE_COLS_1644, TUPLE_DE_PDS_LYT_1644
     elif mti == "1740":
