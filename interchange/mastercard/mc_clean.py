@@ -2,12 +2,11 @@ from interchange.persistence.file import FileStorage
 
 from interchange.mastercard.storage.extract_fc_1644_filepath import extract_fc_from_filepath
 from interchange.mastercard.clean.fields_dtype_def import cast_df_from_params_def, build_arrow_schema_from_params
-from interchange.mastercard.clean.metadata import load_mc_field_dtype_definitions
+from interchange.mastercard.clean.metadata import load_mc_field_dtype_definitions, extend_field_defs_with_base_cols
 
 fs = FileStorage()
 
 VALID_FC_1644 = {"685", "688", "691"}
-
 
 
 def clean_1644_fields(
@@ -27,7 +26,8 @@ def clean_1644_fields(
     )
 
     field_defs = load_mc_field_dtype_definitions()
-
+    field_defs = extend_field_defs_with_base_cols(field_defs)
+    
     schema = build_arrow_schema_from_params(
             field_defs,
             default_decimal_precision=18,
