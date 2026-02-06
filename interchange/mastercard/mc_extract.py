@@ -230,7 +230,7 @@ def extract_1240_fields(
         df = reorder_df_columns(
             df, 
             ordered_layout_cols,
-            first_cols=["file_idn", "file_dt", "ref_id", "type_mti",
+            first_cols=["file_idn", "file_dt", "type_mti", "ref_id", "function_code"
             ],
         )
         
@@ -327,7 +327,7 @@ def extract_1442_fields(
         df = reorder_df_columns(
             df, 
             ordered_layout_cols,
-            first_cols=["file_idn", "file_dt", "ref_id", "type_mti",
+            first_cols=["file_idn", "file_dt", "type_mti", "ref_id", "function_code"
             ],
         )
         
@@ -394,7 +394,7 @@ def extract_1740_fields(
         df = reorder_df_columns(
             df, 
             ordered_layout_cols,
-            first_cols=["file_idn", "file_dt", "ref_id", "type_mti",
+            first_cols=["file_idn", "file_dt", "type_mti", "ref_id", "function_code"
             ],
         )
         
