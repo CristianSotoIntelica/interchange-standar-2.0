@@ -201,7 +201,7 @@ def pipeline_mc_1644(client_id: str, file_id: str):
     timed(
         mc_clean.clean_1644_fields,
         layer.STAGING, 
-        layer.STAGING,+ 
+        layer.STAGING,
         client_id,
         file_id 
     )
@@ -241,9 +241,9 @@ if __name__ == "__main__":
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
     
-    pipeline_mc_interpreter(client_id,file_id)
-    pipeline_mc_1240(client_id=client_id, file_id=file_id)
-    pipeline_mc_1442(client_id=client_id, file_id=file_id)
+    #pipeline_mc_interpreter(client_id,file_id)
+    #pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    #pipeline_mc_1442(client_id=client_id, file_id=file_id)
     pipeline_mc_1644(client_id=client_id, file_id=file_id)
     pipeline_mc_1740(client_id=client_id, file_id=file_id)
     
