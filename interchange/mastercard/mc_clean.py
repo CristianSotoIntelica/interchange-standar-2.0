@@ -335,3 +335,113 @@ def clean_1442_fields(
             index=False, 
             schema=schema
         )
+
+
+def clean_1740_fields(
+        origin_layer: FileStorage.Layer,
+        target_layer: FileStorage.Layer,
+        client_id: str,
+        file_id: str,
+        origin_sub_dir: str = "300_IPM_1740_EXT",
+        target_sub_dir: str = "400_IPM_1740_CLN",
+) -> None:
+    """
+    Clean Mastercard MTI 1740 extracted parquet files.
+
+    This step is metadata-driven: casting rules and output column ordering are derived from
+    DB definitions (de_pds_extract_names) + a small set of required "base" columns.
+
+    Steps
+    -----
+    1) List input parquet files from the EXT subdirectory.
+    2) Load dtype rules from DB (extract_name, data_type, float_decimals).
+    3) Extend metadata with required base columns (file_idn, file_dt, type_mti, ref_id, function_code).
+    4) For each file:
+        - Read parquet from EXT.
+        - Cast/normalize columns according to metadata (types, implied decimals, date/time parsing).
+        - Enforce a deterministic output column order (based on metadata + available columns).
+        - Build a PyArrow schema (once) aligned to the ordered output columns.
+        - Write cleaned parquet to the CLN subdirectory using the Arrow schema.
+
+    Parameters
+    ----------
+    origin_layer : FileStorage.Layer
+        Source layer containing extracted parquet files.
+    target_layer : FileStorage.Layer
+        Target layer where cleaned parquet files are written.
+    client_id : str
+        Client identifier.
+    file_id : str
+        File batch identifier used by FileStorage path resolution.
+    origin_sub_dir : str, default "300_IPM_1740_EXT"
+        Subdirectory containing MTI 1240 extracted parquet files.
+    target_sub_dir : str, default "400_IPM_1740_CLN"
+        Subdirectory where MTI 1240 cleaned parquet files are written.
+
+    Returns
+    -------
+    None
+
+    Side effects
+    ------------
+    Reads and writes parquet files on disk. Queries DB metadata via
+    load_mc_field_dtype_definitions(). Casting may emit warnings through logger.
+
+    Notes
+    -----
+    - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S".
+    - Schema is built from the first processed file and reused; assumes all files share compatible columns.
+    """
+    list_filepaths = fs.get_list_files_folderpath(
+        layer=origin_layer,
+        client_id=client_id,
+        file_id=file_id,
+        subdir=origin_sub_dir
+    )
+
+    fields_defs = load_mc_field_dtype_definitions()
+    fields_defs = extend_field_defs_with_base_cols(fields_defs)
+
+    # Build the schema once (first file) to avoid repeating work.
+    schema = None
+
+    for filepath in list_filepaths:
+        df = fs.read_parquet_by_filepath(
+            client_id=client_id, 
+            file_id=file_id, 
+            filepath=filepath
+        )
+        
+        df_cast = cast_df_from_params_def(
+            df=df,
+            param=fields_defs,
+            date_format="%y%m%d",
+            timestamp_format="%y%m%d%H%M%S",
+        )
+
+        if schema is None:
+            # Arrow schema must match the final column order written to parquet.
+            schema = build_arrow_schema_from_params(
+                param=fields_defs,
+                ordered_cols=list(df_cast.columns),
+                default_decimal_precision=18,
+                default_decimal_scale=2,
+                timestamp_unit="ns",
+            )
+
+
+        out_fp = fs.build_target_parquet_filepath_from_raw(
+            raw_filepath=filepath,
+            target_layer=target_layer,
+            client_id=client_id,
+            file_id=file_id,
+            target_subdir=target_sub_dir,
+            mti="1740"
+        )
+            
+        fs.write_parquet_by_filepath(
+            df_cast, 
+            out_fp, 
+            index=False, 
+            schema=schema
+        )
