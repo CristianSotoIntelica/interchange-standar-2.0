@@ -3,6 +3,19 @@ from interchange.persistence.database import Database
 import pandas as pd
 
 def base_clean_param() -> pd.DataFrame:
+    """
+    Define the mandatory "base" columns for Mastercard clean layer.
+
+    These columns are expected to exist (or be created) in the cleaned output across MTIs,
+    even if they are not present in the DB-driven metadata table.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame with the same structure as `de_pds_extract_names` metadata:
+        - extract_name
+        - data_type
+    """
     return pd.DataFrame(
         [
             {"extract_name": "file_idn", "data_type": "string"},
@@ -14,11 +27,34 @@ def base_clean_param() -> pd.DataFrame:
     )
 
 def extend_field_defs_with_base_cols(field_defs: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extend DB field definitions with required base columns.
+
+    This helper ensures that clean-layer casting always includes a minimal set of common columns
+    (file_idn, file_dt, type_mti, ref_id, function_code), regardless of whether they appear in
+    the DB metadata table.
+
+    Rules
+    -----
+    - Base columns are prepended (appear first in the resulting definitions).
+    - If duplicates exist (same extract_name), base definitions win.
+
+    Parameters
+    ----------
+    field_defs : pandas.DataFrame
+        DataFrame loaded from DB containing dtype rules.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Combined and de-duplicated definitions suitable for metadata-driven casting.
+    """
     base_defs = base_clean_param()
 
+    # Prepend base columns to guarantee they exist and appear first.
     out = pd.concat([base_defs, field_defs], ignore_index=True)
 
-    # Si hay duplicados (mismo extract_name), gana el primero (base_defs)
+    # If duplicates exist, keep the first occurrence (base_defs has priority).
     out["extract_name"] = out["extract_name"].astype(str).str.strip()
     out = out.drop_duplicates(subset=["extract_name"], keep="first")
 
@@ -41,9 +77,9 @@ def load_mc_field_dtype_definitions() -> pd.DataFrame:
         One of {"int64", "string", "decimal", "timestamp", "date", "time"}.
     - float_decimals : int | null
         Decimal scale rule (used when data_type == "decimal"):
-        - >= 0  : implied decimals scale
-        - -1    : scale-prefixed decimals (conversion rates)
-        - -2/-3/-4 : dynamic implied decimals by currency code (DE49/DE50/DE51)
+        - >= 0      : implied decimals scale
+        - -1        : scale-prefixed decimals (conversion rates)
+        - -2/-3/-4  : dynamic implied decimals by currency code (DE49/DE50/DE51)
 
     Returns
     -------
@@ -59,8 +95,9 @@ def load_mc_field_dtype_definitions() -> pd.DataFrame:
 
     Notes
     -----
-    This function does not validate that `data_type` values are within the allowed
-    set; validation is handled by downstream casting logic.
+    - This function only normalizes raw metadata; validation of allowed types is handled downstream.
+    - Column ordering for parquet output is enforced by the clean step (after casting),
+      then propagated into the Arrow schema via ordered_cols.
     """
     db = Database()
     fd = db.read_records(

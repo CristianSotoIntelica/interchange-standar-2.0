@@ -19,14 +19,20 @@ def clean_1644_fields(
     """
     Clean Mastercard MTI 1644 extracted parquet files.
 
+    This step is metadata-driven: casting rules and output column ordering are derived from
+    DB definitions (de_pds_extract_names) + a small set of required "base" columns.
+
     Steps
     -----
     1) List input parquet files from the EXT subdirectory.
     2) Load dtype rules from DB (extract_name, data_type, float_decimals).
-    3) Build a PyArrow schema that mirrors the casting rules.
+    3) Extend metadata with required base columns (file_idn, file_dt, type_mti, ref_id, function_code).
     4) For each file:
         - Extract FC from the filepath and skip unsupported FCs.
-        - Read parquet, cast columns according to metadata.
+        - Read parquet from EXT.
+        - Cast/normalize columns according to metadata (types, implied decimals, date/time parsing).
+        - Enforce a deterministic output column order (based on metadata + available columns).
+        - Build a PyArrow schema aligned to the ordered output columns.
         - Write cleaned parquet to the CLN subdirectory using the Arrow schema.
 
     Parameters
@@ -56,6 +62,7 @@ def clean_1644_fields(
     Notes
     -----
     - Only function codes in VALID_FC_1644 are processed; other files are skipped.
+    - Column ordering is enforced before writing so downstream processes see a stable schema.
     """
 
     list_filepaths = fs.get_list_files_folderpath(
@@ -65,6 +72,7 @@ def clean_1644_fields(
         subdir=origin_sub_dir,
     )
 
+    # Metadata-driven casting rules (DB) + required base columns.
     field_defs = load_mc_field_dtype_definitions()
     field_defs = extend_field_defs_with_base_cols(field_defs)
     
@@ -80,15 +88,16 @@ def clean_1644_fields(
             filepath=filepath
         )
 
+        # Cast + normalize. This step also ensures output columns follow a deterministic order.
         df_cast = cast_df_from_params_def(
             df=df, 
             param=field_defs
         )
 
-        
+        # Arrow schema must match the final column order written to parquet.
         schema = build_arrow_schema_from_params(
             field_defs,
-            ordered_cols=list(df_cast.columns),  
+            ordered_cols=list(df_cast.columns),
             default_decimal_precision=18,
             default_decimal_scale=2,
             timestamp_unit="ns",
@@ -122,13 +131,19 @@ def clean_1240_fields(
     """
     Clean Mastercard MTI 1240 extracted parquet files.
 
+    This step is metadata-driven: casting rules and output column ordering are derived from
+    DB definitions (de_pds_extract_names) + a small set of required "base" columns.
+
     Steps
     -----
     1) List input parquet files from the EXT subdirectory.
     2) Load dtype rules from DB (extract_name, data_type, float_decimals).
-    3) Build a PyArrow schema that mirrors the casting rules.
+    3) Extend metadata with required base columns (file_idn, file_dt, type_mti, ref_id, function_code).
     4) For each file:
-        - Read parquet, cast columns according to metadata.
+        - Read parquet from EXT.
+        - Cast/normalize columns according to metadata (types, implied decimals, date/time parsing).
+        - Enforce a deterministic output column order (based on metadata + available columns).
+        - Build a PyArrow schema (once) aligned to the ordered output columns.
         - Write cleaned parquet to the CLN subdirectory using the Arrow schema.
 
     Parameters
@@ -145,7 +160,7 @@ def clean_1240_fields(
         Subdirectory containing MTI 1240 extracted parquet files.
     target_sub_dir : str, default "400_IPM_1240_CLN"
         Subdirectory where MTI 1240 cleaned parquet files are written.
-    
+
     Returns
     -------
     None
@@ -154,12 +169,12 @@ def clean_1240_fields(
     ------------
     Reads and writes parquet files on disk. Queries DB metadata via
     load_mc_field_dtype_definitions(). Casting may emit warnings through logger.
-    
+
     Notes
     -----
-    - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S"
+    - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S".
+    - Schema is built from the first processed file and reused; assumes all files share compatible columns.
     """
-        
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer,
         client_id=client_id,
@@ -167,14 +182,11 @@ def clean_1240_fields(
         subdir=origin_sub_dir
     )
 
-    fields_def = load_mc_field_dtype_definitions()
+    fields_defs = load_mc_field_dtype_definitions()
+    fields_defs = extend_field_defs_with_base_cols(fields_defs)
 
-    schema = build_arrow_schema_from_params(
-            param=fields_def,
-            default_decimal_precision=18,
-            default_decimal_scale=2,
-            timestamp_unit="ns",
-    )
+    # Build the schema once (first file) to avoid repeating work.
+    schema = None
 
     for filepath in list_filepaths:
         df = fs.read_parquet_by_filepath(
@@ -185,10 +197,21 @@ def clean_1240_fields(
         
         df_cast = cast_df_from_params_def(
             df=df,
-            param=fields_def,
+            param=fields_defs,
             date_format="%y%m%d",
             timestamp_format="%y%m%d%H%M%S",
         )
+
+        if schema is None:
+            # Arrow schema must match the final column order written to parquet.
+            schema = build_arrow_schema_from_params(
+                param=fields_defs,
+                ordered_cols=list(df_cast.columns),
+                default_decimal_precision=18,
+                default_decimal_scale=2,
+                timestamp_unit="ns",
+            )
+
 
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,
@@ -215,15 +238,21 @@ def clean_1442_fields(
         target_sub_dir: str = "400_IPM_1442_CLN",
 ) -> None:
     """
-    Clean Mastercard MTI 1240 extracted parquet files.
+    Clean Mastercard MTI 1442 extracted parquet files.
+
+    This step is metadata-driven: casting rules and output column ordering are derived from
+    DB definitions (de_pds_extract_names) + a small set of required "base" columns.
 
     Steps
     -----
     1) List input parquet files from the EXT subdirectory.
     2) Load dtype rules from DB (extract_name, data_type, float_decimals).
-    3) Build a PyArrow schema that mirrors the casting rules.
+    3) Extend metadata with required base columns (file_idn, file_dt, type_mti, ref_id, function_code).
     4) For each file:
-        - Read parquet, cast columns according to metadata.
+        - Read parquet from EXT.
+        - Cast/normalize columns according to metadata (types, implied decimals, date/time parsing).
+        - Enforce a deterministic output column order (based on metadata + available columns).
+        - Build a PyArrow schema (once) aligned to the ordered output columns.
         - Write cleaned parquet to the CLN subdirectory using the Arrow schema.
 
     Parameters
@@ -240,7 +269,7 @@ def clean_1442_fields(
         Subdirectory containing MTI 1442 extracted parquet files.
     target_sub_dir : str, default "400_IPM_1442_CLN"
         Subdirectory where MTI 1442 cleaned parquet files are written.
-    
+
     Returns
     -------
     None
@@ -249,12 +278,12 @@ def clean_1442_fields(
     ------------
     Reads and writes parquet files on disk. Queries DB metadata via
     load_mc_field_dtype_definitions(). Casting may emit warnings through logger.
-    
+
     Notes
     -----
-    - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S"
-    """
-        
+    - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S".
+    - Schema is built from the first processed file and reused; assumes all files share compatible columns.
+    """ 
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer,
         client_id=client_id,
@@ -262,14 +291,10 @@ def clean_1442_fields(
         subdir=origin_sub_dir
     )
 
-    fields_def = load_mc_field_dtype_definitions()
+    fields_defs = load_mc_field_dtype_definitions()
+    fields_defs = extend_field_defs_with_base_cols(fields_defs)
 
-    schema = build_arrow_schema_from_params(
-            param=fields_def,
-            default_decimal_precision=18,
-            default_decimal_scale=2,
-            timestamp_unit="ns",
-    )
+    schema = None
 
     for filepath in list_filepaths:
         df = fs.read_parquet_by_filepath(
@@ -280,10 +305,20 @@ def clean_1442_fields(
         
         df_cast = cast_df_from_params_def(
             df=df,
-            param=fields_def,
+            param=fields_defs,
             date_format="%y%m%d",
             timestamp_format="%y%m%d%H%M%S",
         )
+
+        if schema is None:
+            # Arrow schema must match the final column order written to parquet.
+            schema = build_arrow_schema_from_params(
+                param=fields_defs,
+                ordered_cols=list(df_cast.columns),
+                default_decimal_precision=18,
+                default_decimal_scale=2,
+                timestamp_unit="ns",
+            )
 
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,
@@ -291,7 +326,7 @@ def clean_1442_fields(
             client_id=client_id,
             file_id=file_id,
             target_subdir=target_sub_dir,
-            mti="1240"
+            mti="1442"
         )
             
         fs.write_parquet_by_filepath(

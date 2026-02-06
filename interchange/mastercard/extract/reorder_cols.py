@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from interchange.logs.logger import Logger
 from typing import Iterable, Optional
 
 import pandas as pd 
 
 from interchange.persistence.database import Database
 from interchange.mastercard.extract.nomalize import normalize_col
+
+log = Logger(__name__)
+
 
 def build_ordered_extract_names_from_layout_keys(
         db: Database, 
@@ -119,6 +123,9 @@ def reorder_df_columns(
     and appended at the end (extras).
     """
     out = df.copy()
+
+    log.logger.debug("Columnas first")
+    log.logger.debug(first_cols)
 
     # Normalize column names for consistent matching.
     out.columns = [normalize_col(c) for c in out.columns]
