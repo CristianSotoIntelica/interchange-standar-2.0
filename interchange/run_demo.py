@@ -224,6 +224,14 @@ def pipeline_mc_1740(client_id: str, file_id: str):
         file_id # file_id (md5)
     )
 
+    timed(
+        mc_clean.clean_1740_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
+
 if __name__ == "__main__":
     #client_id = "SBSA"
     #file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
