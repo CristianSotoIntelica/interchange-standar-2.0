@@ -1,6 +1,6 @@
 from interchange.logs.logger import Logger
 from interchange.persistence.file import FileStorage
-from interchange.mastercard.storage.extract_fc_1644_filepath import extract_fc_from_filepath
+from interchange.mastercard.interpreter.storage.extract_fc_1644_filepath import extract_fc_from_filepath
 from interchange.mastercard.extract.layout_keys import build_expected_keys
 from interchange.mastercard.extract.field_defs import build_rename_map
 from interchange.mastercard.extract.schema_validate import missing_layout_keys_in_parquet

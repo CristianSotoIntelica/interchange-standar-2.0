@@ -8,13 +8,18 @@ from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
 from interchange.persistence.file import FileStorage
 
-from interchange.mastercard.io.unblock import unblock_1014
-from interchange.mastercard.io.message_reader import read_len_prefixed_messages
+from interchange.mastercard.interpreter.io.unblock import unblock_1014
+from interchange.mastercard.interpreter.io.message_reader import read_len_prefixed_messages
 
-from interchange.mastercard.iso8583.dataelements import Parameters
-from interchange.mastercard.iso8583.parse_format import build_wide_row, extract_de24_fast, add_headers_fields_697, apply_block_file_context_697
+from interchange.mastercard.interpreter.iso8583.dataelements import Parameters
+from interchange.mastercard.interpreter.iso8583.parse_format import (
+    build_wide_row, 
+    extract_de24_fast, 
+    add_headers_fields_697, 
+    apply_block_file_context_697
+)
 
-from interchange.mastercard.storage.classified_block_mti import (
+from interchange.mastercard.interpreter.storage.classified_block_mti import (
     write_parquet_by_mti_block_streaming,
     _canonical_schema_from_de_spec,
     finalize_writers,
