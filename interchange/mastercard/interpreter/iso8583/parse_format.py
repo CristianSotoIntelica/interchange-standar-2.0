@@ -6,14 +6,14 @@ from collections.abc import Set as AbstractSet
 
 import pandas as pd
 
-from interchange.mastercard.iso8583.decode_digits import decode_digits
+from interchange.mastercard.interpreter.iso8583.decode_digits import decode_digits
 
 from typing import Iterable
 from typing import Callable
 
 
-from interchange.mastercard.iso8583.split_mti import bitmap_bits
-from interchange.mastercard.iso8583.decode_digits import decode_digits
+from interchange.mastercard.interpreter.iso8583.split_mti import bitmap_bits
+from interchange.mastercard.interpreter.iso8583.decode_digits import decode_digits
 
 DEFAULT_NUMERIC_DES = frozenset({
     2,3,4,5,6,9,10,12,14,23,24,25,26,30,37,38,49,50,51,71,73,93,94,95,100

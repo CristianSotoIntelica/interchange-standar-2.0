@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from interchange.mastercard.transform.fixed_width import expand_fixed_width_columns
+from interchange.mastercard.transform.fixed_width import (
+    expand_fixed_width_columns,expand_de43
+)
 from typing import Dict, Union, cast, Tuple
 
 
@@ -78,15 +80,20 @@ def expand_subfields(df: pd.DataFrame, mti: str) -> pd.DataFrame:
     for de_name, de_spec in dict_de.items():
         if de_name not in df.columns:
             continue
+        if de_name == "DE_43":
+            continue # DE_43 se maneja aparte
         if not isinstance(de_spec, dict):
             continue
 
         mapping[de_name] = cast(dict[str, int], de_spec)
+        
+    # primero expandir los fixed-width normales
+    df_out = expand_fixed_width_columns(df=df, specs_by_col=mapping) if mapping else df
 
-        if not mapping:
-            return df
-
-    return expand_fixed_width_columns(df=df, specs_by_col=mapping)
+    # luego expande DE_43 con regla especial
+    df_out = expand_de43(df_out, col="DE_43")
+    
+    return df_out
 
 def reorder_with_subfield(df: pd.DataFrame, mti: str) -> pd.DataFrame:
 

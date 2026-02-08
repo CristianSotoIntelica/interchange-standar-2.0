@@ -15,11 +15,23 @@ log = Logger(__name__)
 fs = FileStorage()
 
 def transform_ipm_1240(
-        origin_layer: FileStorage.Layer, target_layer: FileStorage.Layer, 
-        client_id: str, file_id: str, origin_sub_dir: str="100_IPM_1240_RAW", 
+        origin_layer: FileStorage.Layer, 
+        target_layer: FileStorage.Layer, 
+        client_id: str, 
+        file_id: str, 
+        origin_sub_dir: str="100_IPM_1240_RAW", 
         target_sub_dir: str="200_IPM_1240_TRA"
 ) -> None:
     
+    meta = fs.get_file_control_details(
+        client_id=client_id,
+        file_id=file_id,
+        fields=["file_type", "file_processing_date", "file_id"],
+    )
+
+    file_processing_date = meta["file_processing_date"]
+    file_type = str(meta["file_type"]).strip().upper()
+
     # 1) Obtener lista de parquets derivados
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer, client_id=client_id, file_id=file_id, subdir=origin_sub_dir)
@@ -45,19 +57,41 @@ def transform_ipm_1240(
             "MTI": "type_mti",
         })
 
+        # Metadata constante para todas las particiones
+        df_expand = df_expand.assign(
+            file_type=file_type,
+            file_processing_date=file_processing_date,
+            file_id=file_id
+        )
+
         # 6) Generar parquets
         out_fp = fs.build_target_parquet_filepath_from_raw(
-            raw_filepath=filepath, target_layer=target_layer, client_id=client_id,
-            file_id=file_id, target_subdir=target_sub_dir
+            raw_filepath=filepath, 
+            target_layer=target_layer, 
+            client_id=client_id,
+            file_id=file_id, 
+            target_subdir=target_sub_dir,
         )
 
         fs.write_parquet_by_filepath(df_expand, out_fp, index=False)
 
 def transform_ipm_1442(
-        origin_layer: FileStorage. Layer, target_layer: FileStorage.Layer, 
-        client_id: str, file_id: str, origin_sub_dir: str="100_IPM_1442_RAW", 
+        origin_layer: FileStorage. Layer, 
+        target_layer: FileStorage.Layer, 
+        client_id: str, 
+        file_id: str, 
+        origin_sub_dir: str="100_IPM_1442_RAW", 
         target_sub_dir: str="200_IPM_1442_TRA",
 ) -> None:
+    
+    meta = fs.get_file_control_details(
+        client_id=client_id,
+        file_id=file_id,
+        fields=["file_type", "file_processing_date", "file_id"],
+    )
+
+    file_processing_date = meta["file_processing_date"]
+    file_type = str(meta["file_type"]).strip().upper()
 
     # 1) Obtener lista de parquets derivados
     list_filepaths = fs.get_list_files_folderpath(
@@ -84,10 +118,20 @@ def transform_ipm_1442(
             "MTI": "type_mti",
         })
 
+         # Metadata constante para todas las particiones
+        df_expand = df_expand.assign(
+            file_type=file_type,
+            file_processing_date=file_processing_date,
+            file_id=file_id
+        )
+
         # 6) Generar parquets
         out_fp = fs.build_target_parquet_filepath_from_raw(
-            raw_filepath=filepath, target_layer=target_layer, client_id=client_id,
-            file_id=file_id, target_subdir=target_sub_dir
+            raw_filepath=filepath, 
+            target_layer=target_layer, 
+            client_id=client_id,
+            file_id=file_id, 
+            target_subdir=target_sub_dir,
         )
 
         fs.write_parquet_by_filepath(df_expand, out_fp, index=False)

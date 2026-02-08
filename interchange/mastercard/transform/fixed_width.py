@@ -2,6 +2,54 @@ from __future__ import annotations
 
 import pandas as pd
 
+def expand_de43(df: pd.DataFrame, col: str = "DE_43") ->  pd.DataFrame:
+    if df is None or df.empty or col not in df.columns:
+        return df
+    s = df[col].fillna("").astype(str)
+
+    # Split en 3 delimitadores: name, street, city, tail
+    parts = s.str.split("\\", n=3, expand=True, regex=False)
+
+    # Asegura 4 columnas aunque falten
+    while parts.shape[1] < 4:
+        parts[parts.shape[1]] = ""
+
+    name = parts[0].fillna("")
+    street = parts[1].fillna("")
+    city   = parts[2].fillna("")
+    tail   = parts[3].fillna("")
+
+    # Tail debe tener al menos 16 chars para (10,3,3)
+    tail16 = tail.str.pad(16, side="right").str.slice(0, 16)
+
+    postal  = tail16.str.slice(0, 10)
+    subdiv  = tail16.str.slice(10, 13)
+    country = tail16.str.slice(13, 16)
+
+    out = pd.DataFrame(
+        {
+            "DE_43_1": name,
+            "DE_43_2": street,
+            "DE_43_3": city,
+            "DE_43_4": postal,
+            "DE_43_5": subdiv,
+            "DE_43_6": country,
+        },
+        index=df.index,
+    )
+
+    # Limpieza: rstrip y vacíos -> NA
+    for c in out.columns:
+        out[c] = out[c].astype("string").str.rstrip()
+        out[c] = out[c].replace("", pd.NA)
+
+    # Si ya existían subfields viejos (mal cortados), los pisamos
+    to_drop = [c for c in out.columns if c in df.columns]
+    if to_drop:
+        df = df.drop(columns=to_drop)
+
+    return pd.concat([df, out], axis=1)
+
 def expand_fixed_width_series_to_df(
     serie: pd.Series, spec: dict[str, int], *, prefix: str | None = None,
 ) -> pd.DataFrame:
