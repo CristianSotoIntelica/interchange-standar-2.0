@@ -2,7 +2,7 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from interchange.persistence.file import FileStorage
 from interchange.visa import transform, extract, clean, calculate, interchange, store
-from interchange.mastercard import interpreter, mc_transform, mc_extract, mc_clean
+from interchange.mastercard import interpreter, mc_transform, mc_extract, mc_clean, mc_calculate
 from pathlib import Path
 import gc
 import time  # <-- añadimos time
@@ -130,24 +130,32 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
 
 def pipeline_mc_1240(client_id: str, file_id: str):
 
-    timed(
-        mc_transform.transform_ipm_1240, # Function
-        layer.STAGING, # origin_layer
-        layer.STAGING, # target_layer
-        client_id, # client_id (bank)
-        file_id # file_id (md5)
-    )
+    # timed(
+    #     mc_transform.transform_ipm_1240, # Function
+    #     layer.STAGING, # origin_layer
+    #     layer.STAGING, # target_layer
+    #     client_id, # client_id (bank)
+    #     file_id # file_id (md5)
+    # )
+
+    # timed(
+    #     mc_extract.extract_1240_fields, 
+    #     layer.STAGING, # origin_target
+    #     layer.STAGING, # target_target
+    #     client_id, # client_id (bank)
+    #     file_id, # file_id (md5)
+    # )
+
+    # timed(
+    #     mc_clean.clean_1240_fields, 
+    #     layer.STAGING, # origin_target
+    #     layer.STAGING, # target_target
+    #     client_id, # client_id (bank)
+    #     file_id, # file_id (md5)
+    # )
 
     timed(
-        mc_extract.extract_1240_fields, 
-        layer.STAGING, # origin_target
-        layer.STAGING, # target_target
-        client_id, # client_id (bank)
-        file_id, # file_id (md5)
-    )
-
-    timed(
-        mc_clean.clean_1240_fields, 
+        mc_calculate.calculate_1240_fields, 
         layer.STAGING, # origin_target
         layer.STAGING, # target_target
         client_id, # client_id (bank)
@@ -250,10 +258,10 @@ if __name__ == "__main__":
     # pipeline_visa_vss(client_id, file_id)
     
     #pipeline_mc_interpreter(client_id,file_id)
-    #pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    pipeline_mc_1240(client_id=client_id, file_id=file_id)
     #pipeline_mc_1442(client_id=client_id, file_id=file_id)
-    pipeline_mc_1644(client_id=client_id, file_id=file_id)
-    pipeline_mc_1740(client_id=client_id, file_id=file_id)
+    #pipeline_mc_1644(client_id=client_id, file_id=file_id)
+    #pipeline_mc_1740(client_id=client_id, file_id=file_id)
     
     #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():
