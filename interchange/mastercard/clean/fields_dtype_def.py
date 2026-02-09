@@ -468,7 +468,16 @@ def cast_df_from_params_def(
                     f"se aplicó fallback={default_decimal_scale}"
                 )
 
-            out[col] = converted        
+            out[col] = converted
+
+        meta_cols = p["extract_name"].tolist()
+        
+        ordered = [c for c in meta_cols if c in out.columns]
+        ordered_set = set(ordered)
+
+        extras = [c for c in out.columns if c not in ordered_set]
+
+        out = out.loc[:, ordered + extras]
 
     return out
 

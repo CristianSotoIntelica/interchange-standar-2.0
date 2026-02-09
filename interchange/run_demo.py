@@ -2,7 +2,7 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from interchange.persistence.file import FileStorage
 from interchange.visa import transform, extract, clean, calculate, interchange, store
-from interchange.mastercard import interpreter, mc_transform, mc_extract, mc_clean, mc_calculate
+from interchange.mastercard import mc_interpreter, mc_transform, mc_extract, mc_clean, mc_calculate
 from pathlib import Path
 import gc
 import time  # <-- añadimos time
@@ -121,7 +121,7 @@ def pipeline_visa_vss(client_id, file_id):
 def pipeline_mc_interpreter(client_id: str, file_id: str):
 
     timed(
-        interpreter.interpretate_msg, # Function
+        mc_interpreter.interpretate_msg, # Function
         layer.LANDING, # origin_layer 
         layer.STAGING, # target_layer
         client_id, # client_id (bank)
@@ -245,11 +245,13 @@ if __name__ == "__main__":
     #file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
     client_id = "BRDRO"
     file_id = "e0cdccf3be383ecd2c8044b40c02be44"
+    # client_id = "SBSA"
+    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
     
-    # client_id = "BTRLRO"
+    client_id = "BTRLRO"
     # file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
     # file_id = "3bbe11a245223ecb2ebfb46b6d2c9f36" # incoming
-    # file_id = "927e539ab0e66cbcf48cd6043cac1d47" # outgoing (block)
+    file_id = "927e539ab0e66cbcf48cd6043cac1d47" # outgoing (block)
     # file_id = "28ef73ae78c526c130fccb618a581359" # outgoing (no block)
     # file_id = "cda240036fbee87e93277789a703b8e5" # outgoing (no block)
 

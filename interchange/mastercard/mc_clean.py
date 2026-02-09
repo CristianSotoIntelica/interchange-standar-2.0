@@ -1,8 +1,14 @@
 from interchange.persistence.file import FileStorage
 
-from interchange.mastercard.storage.extract_fc_1644_filepath import extract_fc_from_filepath
-from interchange.mastercard.clean.fields_dtype_def import cast_df_from_params_def, build_arrow_schema_from_params
-from interchange.mastercard.clean.metadata import load_mc_field_dtype_definitions, extend_field_defs_with_base_cols
+from interchange.mastercard.interpreter.storage.extract_fc_1644_filepath import extract_fc_from_filepath
+from interchange.mastercard.clean.fields_dtype_def import (
+    cast_df_from_params_def, 
+    build_arrow_schema_from_params
+)
+from interchange.mastercard.clean.metadata import (
+    load_mc_field_dtype_definitions, 
+    extend_field_defs_with_base_cols
+)
 
 fs = FileStorage()
 
@@ -183,7 +189,14 @@ def clean_1240_fields(
     )
 
     fields_defs = load_mc_field_dtype_definitions()
-    fields_defs = extend_field_defs_with_base_cols(fields_defs)
+    fields_defs = extend_field_defs_with_base_cols(
+        field_defs=fields_defs,
+        extra_base_cols=[
+        {"extract_name": "file_id", "data_type": "string"},
+        {"extract_name": "file_type", "data_type": "string"},
+        {"extract_name": "file_processing_date", "data_type": "string"},
+    ],
+    )
 
     # Build the schema once (first file) to avoid repeating work.
     schema = None
@@ -211,7 +224,6 @@ def clean_1240_fields(
                 default_decimal_scale=2,
                 timestamp_unit="ns",
             )
-
 
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,
@@ -292,8 +304,16 @@ def clean_1442_fields(
     )
 
     fields_defs = load_mc_field_dtype_definitions()
-    fields_defs = extend_field_defs_with_base_cols(fields_defs)
+    fields_defs = extend_field_defs_with_base_cols(
+        field_defs=fields_defs,
+        extra_base_cols=[
+        {"extract_name": "file_id", "data_type": "string"},
+        {"extract_name": "file_type", "data_type": "string"},
+        {"extract_name": "file_processing_date", "data_type": "string"},
+    ],
+    )
 
+    # Build the schema once (first file) to avoid repeating work.
     schema = None
 
     for filepath in list_filepaths:

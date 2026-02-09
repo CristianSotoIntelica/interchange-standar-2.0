@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from interchange.mastercard.iso8583.decode_digits import decode_digits
+from interchange.mastercard.interpreter.iso8583.decode_digits import decode_digits
 # asumo que ya tienes esto:
 # from interchange.mastercard.utils.decode_digits import decode_digits
 
