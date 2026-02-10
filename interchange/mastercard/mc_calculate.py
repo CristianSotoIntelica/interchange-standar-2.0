@@ -8,6 +8,9 @@ from interchange.mastercard.calculate.iar import calculate_iar_unique
 from interchange.mastercard.calculate.enricher_duckdb import (
     calculate_pre2_duckdb, calculate_ex_rate_duckdb, calculate_settlement_report_duckdb
 )
+from interchange.mastercard.calculate.exclude_flag import (
+    build_lookup_691,df_exclude_flag
+)
 
 fs = FileStorage()
 
@@ -31,6 +34,13 @@ def calculate_1240_fields(
     df_iar_unique = None
     iar_file_dt = None
 
+    lookup_691 = build_lookup_691(
+        origin_layer=origin_layer,
+        client_id=client_id,
+        file_id=file_id,
+        origin_sub_dir="400_IPM_1644_CLN"
+    )
+
     for filepath in list_filepaths:
         df = fs.read_parquet_by_filepath(
             client_id=client_id,
@@ -38,7 +48,9 @@ def calculate_1240_fields(
             filepath=filepath
         )
 
-        file_dt_raw = str(df["file_dt"].iloc[0]).strip()
+        df_excluded = df_exclude_flag(df,filepath,lookup_691)
+
+        file_dt_raw = str(df_excluded["file_dt"].iloc[0]).strip()
 
         if df_iar_unique is None or file_dt_raw != iar_file_dt:
             df_iar_unique = calculate_iar_unique(file_dt=file_dt_raw, db=db)
