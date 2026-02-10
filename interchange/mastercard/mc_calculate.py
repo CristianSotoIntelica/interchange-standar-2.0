@@ -4,7 +4,14 @@ from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
 from interchange.persistence.file import FileStorage
 
+from interchange.mastercard.calculate.iar import calculate_iar_unique
+from interchange.mastercard.calculate.enricher_duckdb import (
+    calculate_pre2_duckdb, calculate_ex_rate_duckdb, calculate_settlement_report_duckdb
+)
+
 fs = FileStorage()
+
+db = Database()
 
 def calculate_1240_fields(
         origin_layer: FileStorage.Layer,
@@ -21,13 +28,53 @@ def calculate_1240_fields(
         subdir=origin_sub_dir
     )
 
+    df_iar_unique = None
+    iar_file_dt = None
+
     for filepath in list_filepaths:
         df = fs.read_parquet_by_filepath(
             client_id=client_id,
             file_id=file_id,
             filepath=filepath
         )
-        pass
+
+        file_dt_raw = str(df["file_dt"].iloc[0]).strip()
+
+        if df_iar_unique is None or file_dt_raw != iar_file_dt:
+            df_iar_unique = calculate_iar_unique(file_dt=file_dt_raw, db=db)
+            iar_file_dt = file_dt_raw
+        
+        df_pre_2 = calculate_pre2_duckdb(
+            parquet_path=filepath,
+            db=db,
+            df_iar_unique=df_iar_unique,
+            client_id=client_id,
+            file_id=file_id
+        )
+
+        df_ex_rate = calculate_ex_rate_duckdb(
+            parquet_path=filepath,
+            db=db,
+            client_id=client_id,
+            file_id=file_id,
+            brand="Mastercard",
+        )
+
+        df_amount = calculate_settlement_report_duckdb(
+            df_ex_rate=df_ex_rate,
+            df_pre2=df_pre_2,
+            db=db
+        )
+
+        # TODO: Realizar el paso de jurisdiccion. Y realizar pruebas
+
+        
+
+        
+        
+
+
+        
     
 
 def calculate_1442_fields(
