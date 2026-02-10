@@ -1,5 +1,5 @@
-from interchange.mastercard.iso8583.detect_mti import detect_mti
-from interchange.mastercard.iso8583.split_mti import split_mti_bitmap_body
+from interchange.mastercard.interpreter.iso8583.detect_mti import detect_mti
+from interchange.mastercard.interpreter.iso8583.split_mti import split_mti_bitmap_body
 
 import struct
 

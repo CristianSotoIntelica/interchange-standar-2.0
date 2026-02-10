@@ -4,6 +4,7 @@ import dotenv
 import re 
 
 from pandas import DataFrame
+import pandas as pd
 from interchange.logs.logger import Logger
 
 
@@ -219,3 +220,19 @@ class Database:
                 continue
         return False
     
+
+    def read_sql(self, sql: str, params: tuple = ()) -> DataFrame:
+        """
+        Ejecuta un Select arbitrario (CTEs, joins, windows) con parámetros.
+        Devuelve Dataframe.
+        """
+        try:
+            cur = self.connection.cursor()
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            cols = [d[0] for d in cur.description] if cur.description else []
+            cur.close()
+            return pd.DataFrame(rows, columns=cols)
+        except sqlite3.Error as e:
+            log.logger.error(f"Error executing read_sql: '{e}' ")
+            return pd.DataFrame()

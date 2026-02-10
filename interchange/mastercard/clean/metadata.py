@@ -2,7 +2,7 @@ from __future__ import annotations
 from interchange.persistence.database import Database
 import pandas as pd
 
-def base_clean_param() -> pd.DataFrame:
+def base_clean_param(extra: list[dict] | None = None) -> pd.DataFrame:
     """
     Define the mandatory "base" columns for Mastercard clean layer.
 
@@ -16,17 +16,23 @@ def base_clean_param() -> pd.DataFrame:
         - extract_name
         - data_type
     """
-    return pd.DataFrame(
-        [
-            {"extract_name": "file_idn", "data_type": "string"},
-            {"extract_name": "file_dt", "data_type": "string"},
-            {"extract_name": "type_mti", "data_type": "string"},
-            {"extract_name": "ref_id", "data_type": "int64"},
-            {"extract_name": "function_code", "data_type": "int64"},
-        ]
-    )
+    base = [
+        {"extract_name": "file_idn", "data_type": "string"},
+        {"extract_name": "file_dt", "data_type": "string"},
+        {"extract_name": "type_mti", "data_type": "string"},
+        {"extract_name": "ref_id", "data_type": "int64"},
+        {"extract_name": "function_code", "data_type": "int64"},
+    ]
+    
+    if extra:
+        base.extend(extra)
+    return pd.DataFrame(base)
 
-def extend_field_defs_with_base_cols(field_defs: pd.DataFrame) -> pd.DataFrame:
+def extend_field_defs_with_base_cols(
+        field_defs: pd.DataFrame, 
+        *, 
+        extra_base_cols: list[dict] | None = None
+) -> pd.DataFrame:
     """
     Extend DB field definitions with required base columns.
 
@@ -49,7 +55,7 @@ def extend_field_defs_with_base_cols(field_defs: pd.DataFrame) -> pd.DataFrame:
     pandas.DataFrame
         Combined and de-duplicated definitions suitable for metadata-driven casting.
     """
-    base_defs = base_clean_param()
+    base_defs = base_clean_param(extra=extra_base_cols)
 
     # Prepend base columns to guarantee they exist and appear first.
     out = pd.concat([base_defs, field_defs], ignore_index=True)

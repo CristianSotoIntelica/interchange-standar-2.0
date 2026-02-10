@@ -4,7 +4,7 @@ from enum import StrEnum, auto
 import re
 import dotenv
 import pandas as pd
-from typing import BinaryIO, List, Optional
+from typing import BinaryIO, List, Optional, Any
 import io
 
 from interchange.logs.logger import Logger
@@ -95,7 +95,7 @@ class FileStorage:
                 "file_id": file_id
             }
         ).iloc[0]
-
+        
         if layer == self.Layer.LANDING:
             filepath = os.path.join(
                 self.basepath, layer, client_id, file_details.loc["landing_file_name"])
@@ -204,7 +204,6 @@ class FileStorage:
         
         folder = Path(self._get_folder_path(
             layer=layer, client_id=client_id, file_id=file_id, subdir=subdir))
-        
         if not folder.exists():
             return []
         
@@ -250,10 +249,41 @@ class FileStorage:
     
 
     def build_target_parquet_filepath_from_raw(
-            self, raw_filepath: str, target_layer: Layer, client_id: str, file_id: str,
-            target_subdir: str, mti : Optional[str] = None, fc: Optional[str] = None) -> str:
+            self, 
+            raw_filepath: str, 
+            target_layer: Layer, 
+            client_id: str, 
+            file_id: str,
+            target_subdir: str, 
+            mti : Optional[str] = None, 
+            fc: Optional[str] = None
+    ) -> str:
         target_folder = Path(self._get_folder_path(
-            layer=target_layer, client_id=client_id, file_id=file_id, 
+            layer=target_layer, 
+            client_id=client_id, 
+            file_id=file_id, 
             subdir=target_subdir))
+        
         target_filename = self.build_target_name_from_raw_filepath(raw_filepath, mti, fc)
         return str(target_folder / target_filename)
+    
+    def get_file_control_details(
+            self,
+            client_id: str,
+            file_id:  str,
+            fields: list[str] | None = None,
+     ) -> dict[str, Any]:
+        """
+        Lee campos del file_control para un (client_id, file_id).
+        """
+        if fields is None:
+            fields = ["file_type", "file_processing_date", "file_id"]
+
+        db = Database()
+        row = db.read_records(
+            table_name="file_control",
+            fields=fields,
+            where={"client_id": client_id, "file_id": file_id},
+        ).iloc[0]
+
+        return {f: row.loc[f] for f in fields}

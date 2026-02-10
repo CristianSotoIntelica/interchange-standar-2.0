@@ -4,10 +4,25 @@ from typing import Iterable, Dict, Union, cast
 import pandas as pd
 
 from interchange.mastercard.transform.fixed_width import expand_fixed_width_columns
-from interchange.mastercard.layouts.layout_1240 import (DICT_PDS_LYT_1240, TUPLE_DE_PDS_LYT_1240)
-from interchange.mastercard.layouts.layout_1442 import (DICT_PDS_LYT_1442, TUPLE_DE_PDS_LYT_1442)
-from interchange.mastercard.layouts.layout_1644 import (DICT_PDS_LYT_1644, TUPLE_DE_PDS_LYT_1644,pds_layout_1644_for_function_code, wanted_pds_tags_1644, pds_layout_1644_for_tags )
-from interchange.mastercard.layouts.layout_1740 import (DICT_PDS_LYT_1740, TUPLE_DE_PDS_LYT_1740)
+from interchange.mastercard.layouts.layout_1240 import (
+    DICT_PDS_LYT_1240, 
+    TUPLE_DE_PDS_LYT_1240
+)
+from interchange.mastercard.layouts.layout_1442 import (
+    DICT_PDS_LYT_1442, 
+    TUPLE_DE_PDS_LYT_1442
+)
+from interchange.mastercard.layouts.layout_1644 import (
+    DICT_PDS_LYT_1644, 
+    TUPLE_DE_PDS_LYT_1644, 
+    pds_layout_1644_for_function_code, 
+    wanted_pds_tags_1644, 
+    pds_layout_1644_for_tags
+)
+from interchange.mastercard.layouts.layout_1740 import (
+    DICT_PDS_LYT_1740, 
+    TUPLE_DE_PDS_LYT_1740
+)
 
 PdsLayout = Dict[str, Union[int, Dict[str, int]]]
 
