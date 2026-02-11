@@ -501,8 +501,8 @@ def calculate_settlement_report_duckdb(
                         END
                     ELSE
                         CASE
-                            -- WHEN (de.exchange_value_settlement IS NOT NULL OR de.exchange_value_settlement <> '') THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_settlement AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
-                            WHEN (de.exchange_value_settlement IS NOT NULL OR de.exchange_value_settlement <> '') THEN 888888
+                            WHEN (de.exchange_value_settlement IS NOT NULL) THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_settlement AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
+                            --WHEN (de.exchange_value_settlement IS NOT NULL OR de.exchange_value_settlement <> '') THEN 888888
                             ELSE 99999999
                         END
                 END

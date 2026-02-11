@@ -243,38 +243,55 @@ def extract_de24_fast(
 
     return decode_digits(raw24, enc).strip()
 
+def extract_pds_value_48_105(pds_blob: str, target_tag: str = "0105") -> str | None:
+    if pds_blob is None or pd.isna(pds_blob):
+        return pd.NA
+
+    s = str(pds_blob)
+    i = 0
+    n = len(s)
+
+    while i + 7 <= n:
+        tag = s[i:i+4]
+
+        # length field (3 chars)
+        try:
+            ln = int(s[i+4:i+7])
+        except ValueError:
+            return None
+
+        start = i + 7
+        end = start + ln
+        if end > n:
+            return None
+
+        val = s[start:end]
+        if tag == target_tag:
+            return val
+
+        # move to next PDS
+        i = end
+
+    return None
+
 def add_headers_fields_697(df: pd.DataFrame) -> None:
     """
-    Para headers (function_code == '697'):
-      file_idn = SUBSTRING(de_48, 8, CAST(SUBSTRING(de_48,5,3) AS INT))
-      file_dt = SUBSTRING(File_ID, 4, 6)
-
+    Para headers (function_code == '695'):
+      file_idn = valor del PDS 0105 dentro de de_48 (buscando entre múltiples PDS)
+      file_dt  = SUBSTRING(file_idn, 4, 6)
     Modifica el DataFrame IN-PLACE.
-    Asume que File_ID y File_DT YA existen.
     """
-
-    mask = df["function_code"].astype(str).eq("697")
+    
+    mask = df["function_code"].astype(str).eq("695")
     if not mask.any():
         return
 
     s = df.loc[mask, "de_48"].astype("string")
 
-    # largo = SUBSTRING(de_48,5,3)
-    largo = pd.to_numeric(s.str.slice(4, 7), errors="coerce").fillna(0).astype(int)
+    df.loc[mask, "file_idn"] = s.map(lambda x: extract_pds_value_48_105(x, "0105"))
 
-    # resto desde posición 8
-    resto = s.str.slice(7)
-
-    # file_id con largo variable (pandas no soporta slice variable)
-    file_id = [
-        r[:l] if pd.notna(r) and l > 0 else pd.NA
-        for r, l in zip(resto, largo)
-    ]
-
-    file_id = pd.Series(file_id, index=s.index, dtype="string")
-
-    df.loc[mask, "file_idn"] = file_id
-    df.loc[mask, "file_dt"] = file_id.str.slice(3, 9)
+    # SQL SUBSTRING(file_idn, 4, 6) -> python slice [3:9]
+    df.loc[mask, "file_dt"] = df.loc[mask, "file_idn"].astype("string").str.slice(3, 9)
 
 
 def apply_block_file_context_697(
@@ -297,7 +314,7 @@ def apply_block_file_context_697(
     # -------------------------------------------------
     # 1) Extraer headers 697 del chunk
     # -------------------------------------------------
-    hdr = df["function_code"].astype("string").str.strip().eq("697")
+    hdr = df["function_code"].astype("string").str.strip().eq("695")
     if hdr.any():
         h = (
             df.loc[hdr, ["block", "file_idn", "file_dt"]]
