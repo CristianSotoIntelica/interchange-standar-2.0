@@ -2,7 +2,9 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from interchange.persistence.file import FileStorage
 from interchange.visa import transform, extract, clean, calculate, interchange, store
-from interchange.mastercard import mc_interpreter, mc_transform, mc_extract, mc_clean, mc_calculate
+from interchange.mastercard import (
+    mc_interpreter, mc_transform, mc_extract, mc_clean, mc_calculate
+)
 from pathlib import Path
 import gc
 import time  # <-- añadimos time
@@ -247,6 +249,8 @@ if __name__ == "__main__":
     #file_id = "e0cdccf3be383ecd2c8044b40c02be44"
     client_id = "SBSA"
     file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+    # client_id = "SBSA"
+    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
     
     #client_id = "BTRLRO"
     #file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
@@ -259,7 +263,7 @@ if __name__ == "__main__":
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
     
-    #pipeline_mc_interpreter(client_id,file_id)
+    pipeline_mc_interpreter(client_id,file_id)
     pipeline_mc_1240(client_id=client_id, file_id=file_id)
     pipeline_mc_1442(client_id=client_id, file_id=file_id)
     pipeline_mc_1644(client_id=client_id, file_id=file_id)

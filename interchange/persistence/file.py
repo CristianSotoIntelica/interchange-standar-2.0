@@ -15,7 +15,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-import polars as pl
+# import polars as pl
 
 log = Logger(__name__)
 
@@ -199,11 +199,11 @@ class FileStorage:
         log.logger.debug(f"Searching for {client_id} file {file_id}")
         return pd.read_parquet(filepath)
 
-    def read_parquet_by_filepath_v2(
-            self, client_id: str, file_id: str, filepath: str) -> pd.DataFrame:
+    # def read_parquet_by_filepath_v2(
+    #         self, client_id: str, file_id: str, filepath: str) -> pd.DataFrame:
 
-        log.logger.debug(f"Searching for {client_id} file {file_id} reading parquet {filepath}")
-        return pl.scan_parquet(filepath)
+    #     log.logger.debug(f"Searching for {client_id} file {file_id} reading parquet {filepath}")
+    #     return pl.scan_parquet(filepath)
     
     def get_list_files_folderpath(
             self, layer: Layer, client_id: str, file_id: str, subdir: str = ""):
