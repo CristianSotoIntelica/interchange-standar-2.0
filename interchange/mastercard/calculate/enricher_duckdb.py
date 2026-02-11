@@ -299,7 +299,7 @@ def calculate_ex_rate_duckdb(
     df_ex = db.read_sql(
         f"""
         SELECT 
-            app_processing_date,
+            rate_date,
             brand,
             currency_from_code,
             currency_to,
@@ -358,11 +358,11 @@ def calculate_ex_rate_duckdb(
         ex2 AS (
             SELECT 
                 CASE 
-                    WHEN regexp_matches(CAST(app_processing_date AS VARCHAR), '^\\d{{6}}$')
-                    THEN CAST(strptime(CAST(app_processing_date AS VARCHAR), '%y%m%d') AS DATE)
-                    WHEN regexp_matches(CAST(app_processing_date AS VARCHAR), '^\\d{{8}}$')
-                    THEN CAST(strptime(CAST(app_processing_date AS VARCHAR), '%Y%m%d') AS DATE)
-                    ELSE CAST(CAST(app_processing_date AS VARCHAR) AS DATE)
+                    WHEN regexp_matches(CAST(rate_date AS VARCHAR), '^\\d{{6}}$')
+                    THEN CAST(strptime(CAST(rate_date AS VARCHAR), '%y%m%d') AS DATE)
+                    WHEN regexp_matches(CAST(rate_date AS VARCHAR), '^\\d{{8}}$')
+                    THEN CAST(strptime(CAST(rate_date AS VARCHAR), '%Y%m%d') AS DATE)
+                    ELSE CAST(CAST(rate_date AS VARCHAR) AS DATE)
                 END AS proc_date,
                 currency_from_code,
                 currency_to,
@@ -404,7 +404,7 @@ def calculate_ex_rate_duckdb(
         FROM t2
         LEFT JOIN cus 
         ON TRUE
-        
+
         LEFT JOIN cur cur_set
         ON upper(cus.settlement_currency_code) = upper(cur_set.currency_alphabetic_code)
 
@@ -457,14 +457,13 @@ def calculate_settlement_report_duckdb(
       ref_id, file_id,
       settlement_report_currency_code,
       settlement_report_amount,
-      mc_file_id
     """
 
     df_cur = db.read_sql(
         f"""
         SELECT 
-        currency_numeric_code,
-        currency_alphabetic_code
+            currency_numeric_code,
+            currency_alphabetic_code
         FROM {currency_table}
         """
     )
@@ -482,7 +481,7 @@ def calculate_settlement_report_duckdb(
         de.file_id,
 
         CASE
-            WHEN de.file_type = 'IN' THEN cur_rec.currency_alphabetic_code
+            WHEN de.file_type = 'IN' THEN CAST(cur_rec.currency_alphabetic_code AS VARCHAR)
             ELSE
                 CASE
                     WHEN cf.jurisdiction IN ('on-us','off-us') AND try_cast(de.currency_code_transaction AS INTEGER) = try_cast(de.local_currency_code_numeric AS INTEGER) THEN CAST(de.local_currency_code AS VARCHAR)
@@ -491,16 +490,20 @@ def calculate_settlement_report_duckdb(
         END AS settlement_report_currency_code,
 
         CASE
-            WHEN de.file_type = 'IN' THEN try_cast(de.amount_reconciliation AS DOUBLE)
+            -- WHEN de.file_type = 'IN' THEN try_cast(de.amount_reconciliation AS DECIMAL(18,4))
+            WHEN de.file_type = 'IN' THEN 666666
             ELSE
                 CASE
                     WHEN cf.jurisdiction IN ('on-us','off-us') AND try_cast(de.currency_code_transaction AS INTEGER) = try_cast(de.local_currency_code_numeric AS INTEGER) THEN 
                         CASE
-                            WHEN de.exchange_value_local IS NOT NULL THEN try_cast(de.amount_transaction AS DOUBLE) * try_cast(de.exchange_value_local AS DOUBLE)
+                            -- WHEN de.exchange_value_local IS NOT NULL THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_local AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
+                            WHEN de.exchange_value_local IS NOT NULL THEN 7777777
                         END
                     ELSE
                         CASE
-                            WHEN de.exchange_value_settlement IS NOT NULL THEN try_cast(de.amount_transaction AS DOUBLE) * try_cast(de.exchange_value_settlement AS DOUBLE)
+                            -- WHEN (de.exchange_value_settlement IS NOT NULL OR de.exchange_value_settlement <> '') THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_settlement AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
+                            WHEN (de.exchange_value_settlement IS NOT NULL OR de.exchange_value_settlement <> '') THEN 888888
+                            ELSE 99999999
                         END
                 END
         END AS settlement_report_amount
@@ -531,25 +534,17 @@ def calculate_calculated_fields_duckdb(
         file_id: str | None = None,
 ) -> pd.DataFrame:
     """
-    PASO 8 (sistema 1) adaptado a tu pipeline.
 
     Ensambla:
       - base parquet (t)
       - pre2 (tp) por (ref_id, file_id) y tp.n=1
       - amount (tp1) left join por (ref_id, file_id)
-
-    Devuelve columnas tipo "dh_mastercard_calculated_field" (nombres legacy),
-    mapeando:
-      app_id        <- ref_id
-      app_hash_file <- file_id
-      app_type_file <- file_type
-      app_processing_date <- file_dt (si no tienes otra)
     """
-
     parquet_path = str(Path(parquet).resolve())
-    where_sql = ""
 
+    where_sql = ""
     params: list[object] = [parquet_path]
+
     if file_id is not None:
         where_sql = "WHERE t.file_id = ?"
         params.append(file_id)
@@ -564,36 +559,38 @@ def calculate_calculated_fields_duckdb(
         SELECT 
             t.ref_id, 
             t.file_id, 
+            t.file_type, 
             t.type_mti, 
             t.file_dt 
         FROM read_parquet(?) t 
         {where_sql}
         )
         SELECT 
-        t.ref_id AS app_id, 
-        '{client_id}' AS app_customer_code, 
-        t.type_mti AS app_type_file, 
-        t.file_id AS app_hash_file, 
-        t.file_dt AS app_processing_date, 
+            t.ref_id AS app_id, 
+            '{client_id}' AS app_customer_code, 
+            t.file_type AS app_type_file,
+            t.file_id AS app_hash_file, 
+            t.file_dt AS app_processing_date, 
+            t.type_mti AS type_mti, 
 
-        tp.business_mode,
-        tp.jurisdiction,
-        tp.jurisdiction_region,
-        tp.funding_source, 
-        tp.gcms_product_identifier, 
-        tp.card_program_identifier, 
+            tp.business_mode,
+            tp.jurisdiction,
+            tp.jurisdiction_country, 
+            tp.jurisdiction_region, 
+            tp.funding_source, 
+            tp.gcms_product_identifier, 
+            tp.card_program_identifier, 
 
-        CASE tp.jurisdiction 
-            WHEN 'intraregional' THEN CAST(tp.jurisdiction_region AS VARCHAR)
-            WHEN 'interregional' THEN '9' 
-            ELSE CAST(tp.jurisdiction_country AS VARCHAR)
-        END AS jurisdiction_assigned, 
+            CASE tp.jurisdiction 
+                WHEN 'intraregional' THEN CAST(tp.jurisdiction_region AS VARCHAR)
+                WHEN 'interregional' THEN '9' 
+                ELSE CAST(tp.jurisdiction_country AS VARCHAR)
+            END AS jurisdiction_assigned, 
 
-        tp1.settlement_report_currency_code, 
-        tp1.settlement_report_amount, 
-        tp1.mc_file_id,
+            tp1.settlement_report_currency_code, 
+            tp1.settlement_report_amount, 
 
-        tp.iar_country 
+            tp.iar_country 
 
         FROM t 
         INNER JOIN tp 
