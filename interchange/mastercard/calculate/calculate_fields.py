@@ -3,9 +3,9 @@ import pandas as pd
 from interchange.mastercard.calculate.layout_calculate_fields import (
     AMOUNT_COLS_FINAL, EXRATE_COLS_FINAL, PRE2_COLS_FINAL, KEYS
 )
-from typing import Mapping, Sequence, Any
+from typing import Mapping, Sequence, Any, Optional
+from decimal import Decimal, InvalidOperation
 import pyarrow as pa
-
 
 def _ensure_required_cols(df: pd.DataFrame, required: list[str], df_name: str) -> None:
     missing = [c for c in required if c not in df.columns]
@@ -83,71 +83,61 @@ def build_mc_calculated_df(
     final = final[ordered_cols]
 
     return final
+
+def decimal_from_value(x: Any):
+    if x is None:
+        return None
+    if isinstance(x, Decimal):
+        return x 
+    try:
+        if pd.isna(x):
+            return None
+    except Exception:
+        pass
+
+    s = str(x).strip()
+    if s == "" or s.lower() in ("nan", "none", "<na>"):
+        return None
     
-def build_arrow_schema_from_layout(
-    *,
-    layout: Mapping[str, Any],
-    ordered_cols: Sequence[str],
-    default_decimal_precision: int = 18,
-    default_decimal_scale: int = 4,
-    timestamp_unit: str = "ns",
-) -> pa.Schema:
-    """
-    Construye un pa.Schema para la capa CAL desde un layout dict.
+    try:
+        return Decimal(s)
+    except(InvalidOperation, ValueError):
+        return None
+    
+def to_decimal_series(s: pd.Series) -> pd.Series:
+    return s.map(decimal_from_value)
 
-    layout soporta:
-      - col -> "string" | "int64" | "timestamp" | "date" | "decimal"
-      - col -> {"dtype":"decimal", "precision":18, "scale":4}
-        (precision/scale opcionales; toman defaults si faltan)
-    """
+def to_int64(s: pd.Series) -> pd.Series:
+    return pd.to_numeric(s.astype("string").str.strip(), errors="coerce").astype("Int64")
 
-    def _arrow_type(col: str, spec: Any) -> pa.DataType:
-        # Spec puede ser str o dict
-        if isinstance(spec, str):
-            t = spec.strip().lower()
+def to_str(s: pd.Series) -> pd.Series:
+    return s.astype("string")
 
-            if t in ("string", "str", "varchar", "text"):
-                return pa.string()
-            if t in ("int64", "bigint", "int"):
-                return pa.int64()
-            if t in ("timestamp", "datetime"):
-                return pa.timestamp(timestamp_unit)
-            if t in ("date", "date32"):
-                return pa.date32()
-            if t in ("decimal", "numeric"):
-                return pa.decimal128(default_decimal_precision, default_decimal_scale)
+def to_ts(s: pd.Series) -> pd.Series:
+    return pd.to_datetime(s, errors="coerce")
 
-            raise ValueError(f"Tipo no soportado en layout: col={col!r}, type={t!r}")
+def to_date(s: pd.Series) -> pd.Series:
+    # date32 funciona bien con objetos datetime.date
+    return pd.to_datetime(s, errors="coerce").dt.date
 
-        if isinstance(spec, dict):
-            dtype = str(spec.get("dtype", "")).strip().lower()
+def cast_df_from_layout(df: pd.DataFrame, layout: Mapping[str, Any]) -> pd.DataFrame:
+    out = df.copy()
 
-            # Permitimos que el usuario use "decimal" o incluso "numeric"
-            if dtype in ("decimal", "numeric"):
-                prec = int(spec.get("precision", default_decimal_precision))
-                scale = int(spec.get("scale", default_decimal_scale))
+    for col, spec in layout.items():
+        if col not in out.columns:
+            continue
 
-                # Validaciones básicas
-                if prec <= 0:
-                    raise ValueError(f"[{col}] precision inválida: {prec}")
-                if scale < 0:
-                    raise ValueError(f"[{col}] scale inválido: {scale}")
-                if scale > prec:
-                    raise ValueError(f"[{col}] scale ({scale}) no puede ser > precision ({prec})")
+        dtype = spec.strip().lower() if isinstance(spec, str) else str(spec.get("dtype", "")).strip().lower()
 
-                return pa.decimal128(prec, scale)
+        if dtype in ("int64", "bigint", "int"):
+            out[col] = to_int64(out[col])
+        elif dtype in ("string", "str", "varchar", "text"):
+            out[col] = to_str(out[col])
+        elif dtype in ("timestamp", "datetime"):
+            out[col] = to_ts(out[col])
+        elif dtype in ("date", "date32"):
+            out[col] = to_date(out[col])
+        elif dtype in ("decimal", "numeric"):
+            out[col] = to_decimal_series(out[col])
 
-            # Si en el futuro quieres soportar dict para timestamp, etc.
-            # podrías extender aquí.
-            raise ValueError(f"Dict spec no soportado para col={col!r}: {spec}")
-
-        raise ValueError(f"Spec inválido para col={col!r}: {spec!r} (esperado str o dict)")
-
-    fields: list[pa.Field] = []
-    for col in ordered_cols:
-        if col not in layout:
-            raise ValueError(f"Columna {col!r} no está definida en layout")
-        pa_type = _arrow_type(col, layout[col])
-        fields.append(pa.field(col, pa_type, nullable=True))
-
-    return pa.schema(fields)
+    return out

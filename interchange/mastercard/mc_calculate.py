@@ -13,8 +13,10 @@ from interchange.mastercard.calculate.exclude_flag import (
     build_lookup_691, df_exclude_flag, 
 )
 
+from interchange.mastercard.calculate.calculate_schema import build_arrow_schema_from_layout
+
 from interchange.mastercard.calculate.calculate_fields import (
-    build_mc_calculated_df, build_arrow_schema_from_layout
+    build_mc_calculated_df, cast_df_from_layout
 )
 
 from interchange.mastercard.calculate.layout_calculate_fields import (
@@ -35,9 +37,12 @@ def calculate_1240_fields(
         origin_sub_dir: str = "400_IPM_1240_CLN",
         target_sub_dir: str = "500_IPM_1240_CAL",
 ) -> None:
+    
     log.logger.debug(f"Searching for {client_id} file {file_id}")
 
     schema = None
+
+    log.logger.debug(f"get_list_files_folderpath")
 
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer,
@@ -46,18 +51,25 @@ def calculate_1240_fields(
         subdir=origin_sub_dir
     )
 
-    log.logger.debug(f"END Searching for {client_id} file {file_id}")
+    if not list_filepaths: 
+        log.logger.warning(f"No parquets found in {origin_sub_dir} for {client_id} {file_id}")
+        return 
+    
+    log.logger.debug(f"END Searching for {client_id} file {file_id}: {len(list_filepaths)}")
 
     df_iar_unique = None
     iar_file_dt = None
 
-    out_dir = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
+    log.logger.debug(f"build_lookup_691")
+
     lookup_691 = build_lookup_691(
         origin_layer=origin_layer,
         client_id=client_id,
         file_id=file_id,
         origin_sub_dir="400_IPM_1644_CLN"
     )
+
+    log.logger.debug(f"read_parquet_by_filepath")
 
     for filepath in list_filepaths:
         df = fs.read_parquet_by_filepath(
@@ -70,12 +82,18 @@ def calculate_1240_fields(
 
         file_dt_raw = str(df["file_dt"].iloc[0]).strip()
 
+        log.logger.debug("df_exclude_flag")
+
         df_excluded = df_exclude_flag(df,filepath,lookup_691)
-        df_excluded.head(1000).to_csv(out_dir / f"df_excluded_flag.csv", index=False)
+        # df_excluded.head(1000).to_csv(out_dir / f"df_excluded_flag.csv", index=False)
+
+        log.logger.debug("calculate_iar_unique")
 
         if df_iar_unique is None or file_dt_raw != iar_file_dt:
             df_iar_unique = calculate_iar_unique(file_dt=file_dt_raw, db=db)
             iar_file_dt = file_dt_raw
+
+        log.logger.debug("calculate_pre2_duckdb")
         
         df_pre_2 = calculate_pre2_duckdb(
             parquet_path=filepath,
@@ -85,6 +103,8 @@ def calculate_1240_fields(
             file_id=file_id
         )
 
+        log.logger.debug("calculate_ex_rate_duckdb")
+
         df_ex_rate = calculate_ex_rate_duckdb(
             parquet_path=filepath,
             db=db,
@@ -93,11 +113,15 @@ def calculate_1240_fields(
             brand="Mastercard",
         )
 
+        log.logger.debug("calculate_settlement_report_duckdb")
+
         df_amount = calculate_settlement_report_duckdb(
             df_ex_rate=df_ex_rate,
             df_pre2=df_pre_2,
             db=db
         )
+
+        log.logger.debug("build_mc_calculated_df")
 
         df_final = build_mc_calculated_df(
             df_pre2=df_pre_2, 
@@ -105,6 +129,11 @@ def calculate_1240_fields(
             df_amount=df_amount, 
             dedupe_strategy="error",
         )
+
+        log.logger.debug("cast_df_from_layout")
+        df_final = cast_df_from_layout(df_final, CALCULATE_FIELDS_FINAL)
+
+        log.logger.debug("build_arrow_schema_from_layout")
 
         if schema is None:
             schema = build_arrow_schema_from_layout(
@@ -115,6 +144,8 @@ def calculate_1240_fields(
                 timestamp_unit="ns",
             )
 
+        log.logger.debug("build_target_parquet_filepath_from_raw")
+
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,
             target_layer=target_layer,
@@ -124,31 +155,15 @@ def calculate_1240_fields(
             mti="1240"
         )
 
+        log.logger.debug(f"write_parquet_by_filepath")
         fs.write_parquet_by_filepath(
-            df_final, 
-            out_fp, 
+            data=df_final, 
+            filepath=out_fp, 
             index=False, 
             schema=schema
         )
 
-
-        df_iar_unique.head(1000).to_csv(out_dir / f"df_iar_unique.csv", index=False)
-        df_pre_2.head(1000).to_csv(out_dir / f"df_pre_2.csv", index=False)
-        df_ex_rate.head(1000).to_csv(out_dir / f"df_ex_rate.csv", index=False)
-        df_amount.head(1000).to_csv(out_dir / f"df_amount.csv", index=False)
-        df_final.head(10000).to_csv(out_dir / f"df_final.csv", index=False)
-
         log.logger.debug(f"END Reading parquet for {client_id} file {file_id}")
-        break
-
-        
-
-        
-        
-
-
-        
-    
 
 def calculate_1442_fields(
         origin_layer: FileStorage.Layer,
