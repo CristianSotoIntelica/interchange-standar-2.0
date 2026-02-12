@@ -490,20 +490,16 @@ def calculate_settlement_report_duckdb(
         END AS settlement_report_currency_code,
 
         CASE
-            -- WHEN de.file_type = 'IN' THEN try_cast(de.amount_reconciliation AS DECIMAL(18,4))
-            WHEN de.file_type = 'IN' THEN 666666
+            WHEN de.file_type = 'IN' THEN try_cast(de.amount_reconciliation AS DECIMAL(18,4))
             ELSE
                 CASE
                     WHEN cf.jurisdiction IN ('on-us','off-us') AND try_cast(de.currency_code_transaction AS INTEGER) = try_cast(de.local_currency_code_numeric AS INTEGER) THEN 
                         CASE
-                            -- WHEN de.exchange_value_local IS NOT NULL THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_local AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
-                            WHEN de.exchange_value_local IS NOT NULL THEN 7777777
+                            WHEN de.exchange_value_local IS NOT NULL THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_local AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
                         END
                     ELSE
                         CASE
                             WHEN (de.exchange_value_settlement IS NOT NULL) THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_settlement AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
-                            --WHEN (de.exchange_value_settlement IS NOT NULL OR de.exchange_value_settlement <> '') THEN 888888
-                            ELSE 99999999
                         END
                 END
         END AS settlement_report_amount
