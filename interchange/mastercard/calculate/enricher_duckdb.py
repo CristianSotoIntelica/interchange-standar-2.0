@@ -536,6 +536,10 @@ def calculate_calculated_fields_duckdb(
       - pre2 (tp) por (ref_id, file_id) y tp.n=1
       - amount (tp1) left join por (ref_id, file_id)
     """
+
+    log.logger.debug(
+            f"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        )
     parquet_path = str(Path(parquet).resolve())
 
     where_sql = ""
@@ -558,15 +562,15 @@ def calculate_calculated_fields_duckdb(
             t.file_type, 
             t.type_mti, 
             t.file_dt 
-        FROM read_parquet(?) t 
+        FROM read_parquet(?) t
         {where_sql}
         )
         SELECT 
-            t.ref_id AS app_id, 
-            '{client_id}' AS app_customer_code, 
-            t.file_type AS app_type_file,
-            t.file_id AS app_hash_file, 
-            t.file_dt AS app_processing_date, 
+            t.ref_id AS ref_id, 
+            '{client_id}' AS client_id, 
+            t.file_type AS file_type,
+            t.file_id AS file_id, 
+            t.file_dt AS file_dt, 
             t.type_mti AS type_mti, 
 
             tp.business_mode,
@@ -590,11 +594,17 @@ def calculate_calculated_fields_duckdb(
 
         FROM t 
         INNER JOIN tp 
-        ON tp.ref_id = t.ref_id AND tp.file_id = t.file_id AND try_cast(tp.n AS INTEGER) = 1 
-
+        ON tp.ref_id = t.ref_id AND tp.file_id = t.file_id AND try_cast(tp.n AS INTEGER) = 1
+        
         LEFT JOIN tp1 
         ON tp1.ref_id = t.ref_id AND tp1.file_id = t.file_id 
         """
+        print(where_sql
+        )
+
+        print(
+            sql
+        )
 
         log.logger.debug(
             f"[calculate_calculated_field_duckdb] parquet={parquet_path} file_id={file_id or 'ALL'}"
