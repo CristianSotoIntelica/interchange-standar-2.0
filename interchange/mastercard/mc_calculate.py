@@ -61,7 +61,7 @@ def calculate_1240_fields(
     df_iar_unique = None
     iar_file_dt = None
 
-    out_dir = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
+    # out_dir = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
 
     log.logger.debug(f"build_lookup_691")
 
@@ -175,11 +175,11 @@ def calculate_1240_fields(
             schema=schema
         )
 
-        df_iar_unique.head(1000).to_csv(out_dir / f"df_iar_unique.csv", index=False)
-        df_pre_2.head(1000).to_csv(out_dir / f"df_pre_2.csv", index=False)
-        df_ex_rate.head(1000).to_csv(out_dir / f"df_ex_rate.csv", index=False)
-        df_amount.head(1000).to_csv(out_dir / f"df_amount.csv", index=False)
-        df_final.head(10000).to_csv(out_dir / f"df_final.csv", index=False)
+        # df_iar_unique.head(1000).to_csv(out_dir / f"df_iar_unique.csv", index=False)
+        # df_pre_2.head(1000).to_csv(out_dir / f"df_pre_2.csv", index=False)
+        # df_ex_rate.head(1000).to_csv(out_dir / f"df_ex_rate.csv", index=False)
+        # df_amount.head(1000).to_csv(out_dir / f"df_amount.csv", index=False)
+        # df_final.head(10000).to_csv(out_dir / f"df_final.csv", index=False)
 
         log.logger.debug(f"END Reading parquet for {client_id} file {file_id}")
 
