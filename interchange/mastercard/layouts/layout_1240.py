@@ -42,6 +42,7 @@ DICT_PDS_LYT_1240: PdsLayout = {
         "PDS_165_1": 1,
         "PDS_165_2": 29,
     },
+    "PDS_176": 3
 }
 
 DICT_DE_LYT_1240 = {
