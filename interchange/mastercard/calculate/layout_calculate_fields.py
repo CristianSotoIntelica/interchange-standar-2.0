@@ -126,6 +126,7 @@ CALCULATE_FIELDS_FINAL = {
 CALCULATE_FIELDS_FINAL = {
     "file_id": "string",
     "ref_id": "int64",
+    "file_idn": "String",
     "file_type": "String",
     "client_id": "String",
     "file_dt": "Int64",

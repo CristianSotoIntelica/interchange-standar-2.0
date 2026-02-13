@@ -96,6 +96,7 @@ def calculate_pre2_duckdb(
             SELECT 
             t.ref_id,
             t.file_id,
+            t.file_idn, -- new field
             t.file_type,
             t.type_mti,
             t.file_dt,
@@ -114,6 +115,7 @@ def calculate_pre2_duckdb(
             SELECT 
             ref_id,
             file_id,
+            file_idn, -- new field 
             file_type,
             type_mti,
             file_dt,
@@ -138,6 +140,7 @@ def calculate_pre2_duckdb(
             SELECT 
             a.ref_id, 
             a.file_id, 
+            a.file_idn, -- new field
             a.file_type, 
             a.type_mti, 
             a.file_dt, 
@@ -225,7 +228,7 @@ def calculate_pre2_duckdb(
         SELECT 
         *,
         row_number() OVER (
-            PARTITION BY ref_id, file_id
+            PARTITION BY ref_id, file_id, file_idn
             ORDER BY app_date_valid DESC, high_key_for_range DESC
         ) AS n 
         FROM joined
@@ -331,6 +334,7 @@ def calculate_ex_rate_duckdb(
                 t.ref_id,
                 t.file_id,
                 t.file_type,
+                t.file_idn, -- new field
                 t.type_mti,
                 t.file_dt,
 
@@ -373,6 +377,7 @@ def calculate_ex_rate_duckdb(
         SELECT 
             t2.ref_id,
             t2.file_id,
+            t2.file_idn, -- new field 
             t2.file_type,
             t2.type_mti,
             t2.file_dt,
@@ -479,7 +484,8 @@ def calculate_settlement_report_duckdb(
         SELECT
         de.ref_id,
         de.file_id,
-
+        de.file_idn, -- new field
+        
         CASE
             WHEN de.file_type = 'IN' THEN CAST(cur_rec.currency_alphabetic_code AS VARCHAR)
             ELSE
@@ -537,9 +543,6 @@ def calculate_calculated_fields_duckdb(
       - amount (tp1) left join por (ref_id, file_id)
     """
 
-    log.logger.debug(
-            f"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        )
     parquet_path = str(Path(parquet).resolve())
 
     where_sql = ""
@@ -560,6 +563,7 @@ def calculate_calculated_fields_duckdb(
             t.ref_id, 
             t.file_id, 
             t.file_type, 
+            t.file_idn, -- new field
             t.type_mti, 
             t.file_dt 
         FROM read_parquet(?) t
@@ -570,6 +574,7 @@ def calculate_calculated_fields_duckdb(
             '{client_id}' AS client_id, 
             t.file_type AS file_type,
             t.file_id AS file_id, 
+            t.file_idn AS file_idn, -- new field
             t.file_dt AS file_dt, 
             t.type_mti AS type_mti, 
 
@@ -599,13 +604,6 @@ def calculate_calculated_fields_duckdb(
         LEFT JOIN tp1 
         ON tp1.ref_id = t.ref_id AND tp1.file_id = t.file_id 
         """
-        print(where_sql
-        )
-
-        print(
-            sql
-        )
-
         log.logger.debug(
             f"[calculate_calculated_field_duckdb] parquet={parquet_path} file_id={file_id or 'ALL'}"
         )
