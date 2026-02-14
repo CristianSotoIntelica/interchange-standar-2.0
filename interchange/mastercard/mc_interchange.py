@@ -7,7 +7,6 @@ from interchange.persistence.file import FileStorage
 from interchange.mastercard.interchange.calculate_duck_db import (
     calculate_pre_eval, assign_rules, calculate_mastercard_fee
 )
-
 fs = FileStorage()
 db = Database()
 log = Logger(__name__)
@@ -99,6 +98,7 @@ def interchange_1240_fields(
                 index=False,
                 schema=None
             )
+
 
             log.logger.debug(f"Evaluate rows: {len(df_evaluate)}")
 
