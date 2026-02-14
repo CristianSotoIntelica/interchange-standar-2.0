@@ -7,7 +7,8 @@ from interchange.persistence.file import FileStorage
 
 from interchange.mastercard.calculate.iar import calculate_iar_unique
 from interchange.mastercard.calculate.enricher_duckdb import (
-    calculate_pre2_duckdb, calculate_ex_rate_duckdb, calculate_settlement_report_duckdb
+    calculate_pre2_duckdb, calculate_ex_rate_duckdb, calculate_settlement_report_duckdb,
+    calculate_calculated_fields_duckdb
 )
 from interchange.mastercard.calculate.exclude_flag import (
     build_lookup_691, df_exclude_flag, 
@@ -59,6 +60,8 @@ def calculate_1240_fields(
 
     df_iar_unique = None
     iar_file_dt = None
+
+    # out_dir = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
 
     log.logger.debug(f"build_lookup_691")
 
@@ -121,14 +124,23 @@ def calculate_1240_fields(
             db=db
         )
 
-        log.logger.debug("build_mc_calculated_df")
-
-        df_final = build_mc_calculated_df(
+        log.logger.debug("calculate_calculated_fields_duckdb")
+        df_final = calculate_calculated_fields_duckdb(
+            client_id=client_id, 
+            file_id=file_id, 
             df_pre2=df_pre_2, 
-            df_ex_rate=df_ex_rate,
             df_amount=df_amount, 
-            dedupe_strategy="error",
+            parquet=filepath
         )
+
+        # log.logger.debug("build_mc_calculated_df")
+
+        # df_final = build_mc_calculated_df(
+        #     df_pre2=df_pre_2, 
+        #     df_ex_rate=df_ex_rate,
+        #     df_amount=df_amount, 
+        #     dedupe_strategy="error",
+        # )
 
         log.logger.debug("cast_df_from_layout")
         df_final = cast_df_from_layout(df_final, CALCULATE_FIELDS_FINAL)
@@ -162,6 +174,12 @@ def calculate_1240_fields(
             index=False, 
             schema=schema
         )
+
+        # df_iar_unique.head(1000).to_csv(out_dir / f"df_iar_unique.csv", index=False)
+        # df_pre_2.head(1000).to_csv(out_dir / f"df_pre_2.csv", index=False)
+        # df_ex_rate.head(1000).to_csv(out_dir / f"df_ex_rate.csv", index=False)
+        # df_amount.head(1000).to_csv(out_dir / f"df_amount.csv", index=False)
+        # df_final.head(10000).to_csv(out_dir / f"df_final.csv", index=False)
 
         log.logger.debug(f"END Reading parquet for {client_id} file {file_id}")
 
