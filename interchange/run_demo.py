@@ -132,29 +132,29 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
 
 def pipeline_mc_1240(client_id: str, file_id: str):
 
-    timed(
-        mc_transform.transform_ipm_1240, # Function
-        layer.STAGING, # origin_layer
-        layer.STAGING, # target_layer
-        client_id, # client_id (bank)
-        file_id # file_id (md5)
-    )
+    # timed(
+    #     mc_transform.transform_ipm_1240, # Function
+    #     layer.STAGING, # origin_layer
+    #     layer.STAGING, # target_layer
+    #     client_id, # client_id (bank)
+    #     file_id # file_id (md5)
+    # )
 
-    timed(
-        mc_extract.extract_1240_fields, 
-        layer.STAGING, # origin_target
-        layer.STAGING, # target_target
-        client_id, # client_id (bank)
-        file_id, # file_id (md5)
-    )
+    # timed(
+    #     mc_extract.extract_1240_fields, 
+    #     layer.STAGING, # origin_target
+    #     layer.STAGING, # target_target
+    #     client_id, # client_id (bank)
+    #     file_id, # file_id (md5)
+    # )
 
-    timed(
-        mc_clean.clean_1240_fields, 
-        layer.STAGING, # origin_target
-        layer.STAGING, # target_target
-        client_id, # client_id (bank)
-        file_id, # file_id (md5)
-    )
+    # timed(
+    #     mc_clean.clean_1240_fields, 
+    #     layer.STAGING, # origin_target
+    #     layer.STAGING, # target_target
+    #     client_id, # client_id (bank)
+    #     file_id, # file_id (md5)
+    # )
 
     # timed(
     #     mc_calculate.calculate_1240_fields, 

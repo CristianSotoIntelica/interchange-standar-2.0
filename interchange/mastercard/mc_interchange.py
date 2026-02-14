@@ -5,7 +5,7 @@ from interchange.logs.logger import Logger
 from interchange.persistence.database import Database
 from interchange.persistence.file import FileStorage
 from interchange.mastercard.interchange.calculate_duck_db import (
-    calculate_pre_eval
+    calculate_pre_eval, assign_rules, calculate_mastercard_fee
 )
 
 fs = FileStorage()
@@ -41,14 +41,6 @@ def interchange_1240_fields(
         subdir=calc_sub_dir
     )
 
-    if not txn_files:
-        log.logger.warning(f"No TXN parquets in {txn_sub_dir}")
-        return
-
-    if not calc_files:
-        log.logger.warning(f"No CAL parquets in {calc_sub_dir}")
-        return
-
     log.logger.debug(f"Found {len(txn_files)} TXN files")
     log.logger.debug(f"Found {len(calc_files)} CAL files")
 
@@ -80,14 +72,17 @@ def interchange_1240_fields(
                 client_id=client_id,
                 file_id=file_id
             )
-
-            # df_fee = calculate_interchange_fee_duckdb(
-            #     df= df_evaluate,
-            #     db=db,
-            #     client_id=client_id,
-            #     file_id=file_id
-            # )
-
+            
+            df_assign = assign_rules(df_eval=df_evaluate, db=db)
+           
+            
+            df_fee = calculate_mastercard_fee(
+                  df_assign=df_assign,
+                  db=db,
+                  brand_fx_eval="MASTERCARD",
+            )
+            print("sum fee:", df_fee["calculated_fee"].sum(skipna=True))
+            print(df_fee["rule"].value_counts().head())
             out_fp = fs.build_target_parquet_filepath_from_raw(
                 raw_filepath=txn_path,
                 target_layer=target_layer,
@@ -99,9 +94,9 @@ def interchange_1240_fields(
 
             log.logger.debug(f"write_parquet_by_filepath")
             fs.write_parquet_by_filepath(
-                data=df_fee, 
-                filepath=out_fp, 
-                index=False, 
+                data=df_fee,
+                filepath=out_fp,
+                index=False,
                 schema=None
             )
 
