@@ -173,7 +173,7 @@ def interpretate_msg(
     df = add_block_column(df)
 
     #6) Generar el dataframe final y obtiene los dataelements de acuerdo al bitmap y body
-    BATCH_SIZE = 300000  # 20 000
+    BATCH_SIZE = 10000  # 20 000
     schema = _canonical_schema_from_de_spec(DE_SPEC)
 
     writers: dict = {}  # key: (file_id, block, mti) -> ParquetWriter 
