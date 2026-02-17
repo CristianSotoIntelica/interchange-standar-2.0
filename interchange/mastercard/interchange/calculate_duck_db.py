@@ -41,12 +41,15 @@ def calculate_pre_eval(
     #    Si en mc_rules hay reglas de amount_transaction para varias monedas (USD, EUR, etc.),
     #    aquí las extraemos para generar amount_transaction_USD, amount_transaction_EUR, ...
     df_targets = db.read_sql("""
-        SELECT amount_transaction_currency
-        FROM mc_rules
-        WHERE amount_transaction_currency IS NOT NULL
-        GROUP BY 1
+    SELECT upper(trim(amount_transaction_currency)) AS amount_transaction_currency
+    FROM mc_rules
+    WHERE amount_transaction IS NOT NULL
+      AND trim(cast(amount_transaction as varchar)) <> ''
+      AND amount_transaction_currency IS NOT NULL
+      AND trim(cast(amount_transaction_currency as varchar)) <> ''
+    GROUP BY 1
     """)
-    target_ccys = [str(x).strip() for x in df_targets["amount_transaction_currency"].tolist() if str(x).strip()]
+    target_ccys = df_targets["amount_transaction_currency"].dropna().astype(str).str.strip().tolist()
 
     # 2) Currency dim
     #    Mapea currency_numeric_code -> currency_alphabetic_code
@@ -85,7 +88,10 @@ def calculate_pre_eval(
         dyn_joins = []
 
         for ccy in target_ccys:
-            alias = f"ex_{ccy}"  # alias único por moneda para no chocar en SQL
+
+            ccy_u = ccy.upper().strip()
+            ccy_l = ccy_u.lower()
+            alias = f"ex_{ccy_l}"  # alias único por moneda para no chocar en SQL
 
             # Columna dinámica: amount_transaction_{ccy}
             # - Si la moneda base ya es la moneda objetivo => multiplica por 1
@@ -97,13 +103,13 @@ def calculate_pre_eval(
                     CAST(
                         (t.amount_transaction *
                             CASE
-                                WHEN upper(cur.currency_alphabetic_code) = upper('{ccy}') THEN 1
+                                WHEN upper(cur.currency_alphabetic_code) = upper('{ccy_u}') THEN 1
                                 ELSE {alias}.exchange_value
                             END
                         ) AS VARCHAR
                     ),
                     'BLANK'
-                ) AS amount_transaction_{ccy}
+                ) AS amount_transaction_{ccy_l}
                 """
             )
 
@@ -117,7 +123,7 @@ def calculate_pre_eval(
                 LEFT JOIN ex {alias}
                   ON CAST({alias}.rate_date AS DATE) = CAST(strftime(t.date_and_time_local_transaction, '%Y-%m-%d') AS DATE)
                  AND try_cast({alias}.currency_from_code AS BIGINT) = try_cast(t.currency_code_transaction AS BIGINT)
-                 AND upper({alias}.currency_to) = upper('{ccy}')
+                 AND upper({alias}.currency_to) = upper('{ccy_u}')
                 """
             )
 
@@ -134,6 +140,7 @@ def calculate_pre_eval(
             SELECT
                 file_id,
                 ref_id,
+                file_idn,
                 pan_de_2 AS pan,                         -- usado para issuer_bin_8
                 acquirer_reference_data_de_31 AS acquirer_reference_data,    
                 -- electronic_commerce_indicator_3,       -- comentado: opcional
@@ -150,6 +157,7 @@ def calculate_pre_eval(
             SELECT
                 file_id,
                 ref_id,
+                file_idn,
                 jurisdiction_assigned AS jurisdiction,
                 gcms_product_identifier,      -- opcional para reglas
                 funding_source,               -- opcional para reglas
@@ -163,7 +171,7 @@ def calculate_pre_eval(
             -- =========================
             t.file_id,
             t.ref_id,
-
+            t.file_idn,
             -- =========================
             -- Campos base para reglas (estilo legacy)
             -- =========================
@@ -207,6 +215,7 @@ def calculate_pre_eval(
         INNER JOIN calc ca
           ON t.file_id = ca.file_id
          AND t.ref_id  = ca.ref_id
+         AND t.file_idn = ca.file_idn
 
         -- Mapea moneda numérica -> alpha de la transacción
         LEFT JOIN cur
@@ -219,6 +228,11 @@ def calculate_pre_eval(
         # Ejecuta query con parámetros: [parquet_txn, parquet_calc]
         df_eval = con.execute(sql, [p_txn, p_cal]).df()
         log.logger.debug(f"[calculate_pre_eval_full_legacy] rows={len(df_eval)} targets={len(target_ccys)}")
+
+        out_dir = Path.cwd() / "debug_rule_engine"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        df_eval.to_csv(out_dir / "pre_eval_df_eval_debug.csv", index=False)
+
         return df_eval
 
     finally:
@@ -354,7 +368,7 @@ def assign_rules(
     # Si no hay data, devuelve el esquema mínimo vacío
     if df_eval is None or df_eval.empty:
         return pd.DataFrame(columns=[
-            "file_id", "ref_id", "rule", "region_country_code", "intelica_id", "ird",
+            "file_id", "ref_id", "file_idn", "rule", "region_country_code", "intelica_id", "ird",
             "rate_currency", "rate_variable", "rate_fixed", "rate_min", "rate_cap",
             "valid_from", "valid_until",
         ])
@@ -370,7 +384,7 @@ def assign_rules(
     work["id"] = range(1, len(work) + 1)
 
     # Validación de columnas mínimas necesarias
-    required = {"file_id", "ref_id", "jurisdiction", "ird", "txn_date"}
+    required = {"file_id", "ref_id", "file_idn","jurisdiction", "ird", "txn_date"}
     missing_req = [c for c in required if c not in work.columns]
     if missing_req:
         raise ValueError(f"df_eval debe incluir {sorted(required)}. Faltan: {missing_req}")
@@ -412,7 +426,7 @@ def assign_rules(
     rules = rules_raw.copy()
     rules["_intelica_num"] = pd.to_numeric(rules.get("intelica_id"), errors="coerce")
     rules = rules.sort_values(["region_country_code", "_intelica_num"], na_position="last").reset_index(drop=True)
-    rules["key"] = range(1, len(rules) + 1)
+    rules["key"] = range(1, len(rules) + 1)     
 
     # Excluye campos no-condición (metadatos / salidas / etc.)
     excluded = {
@@ -424,6 +438,8 @@ def assign_rules(
         "_intelica_num"
     }
     # rule_cols = columnas que representan condiciones (filtros)
+  
+    #['processing_code', 'amount_transaction', 'card_acceptor_business_code', 'gcms_product_identifier', 'funding_source', 'mastercard_assigned_id', 'issuer_bin_8', 'acquirer_bin']
     rule_cols = [c for c in rules.columns if c not in excluded]
 
     # Normalización de condiciones:
@@ -500,6 +516,15 @@ def assign_rules(
     df_neg_rng  = pd.DataFrame(neg_rng,  columns=["key", "col", "lo", "hi"]) if neg_rng else pd.DataFrame(columns=["key", "col", "lo", "hi"])
     df_amt      = pd.DataFrame(amt_rules, columns=["key", "ccy", "kind", "op", "lo", "hi", "eq_str"]) if amt_rules else pd.DataFrame(columns=["key", "ccy", "kind", "op", "lo", "hi", "eq_str"])
 
+    
+    out_dir = Path("/home/ameza/IntelicaProyectos/standard-2.0/interchange-standar-2.0/tst")
+
+    # df_pos_vals.to_csv(out_dir / f"df_pos_vals.csv", index=False)
+    # df_neg_vals.to_csv(out_dir / f"df_neg_vals.csv", index=False)
+    # df_pos_rng.to_csv(out_dir / f"df_pos_rng.csv", index=False)
+    # df_neg_rng.to_csv(out_dir / f"df_neg_rng.csv", index=False)
+    # df_amt.to_csv(out_dir / f"df_amt.csv", index=False)
+    
     # cond_cols = columnas que efectivamente aparecen en pos/neg y existen en work
     cond_cols = sorted(set(df_pos_vals["col"].unique()).union(set(df_neg_vals["col"].unique())))
     cond_cols = [c for c in cond_cols if c in work.columns]
@@ -601,33 +626,54 @@ work2 AS (
     {extra_num}
   FROM work w
 ),
+
 base AS (
   SELECT
-    w2.id, w2.file_id, w2.ref_id, w2.txn_date_d,
-    r.key, r.region_country_code, r.intelica_id,
+    w2.id,
+    w2.file_id,
+    w2.ref_id,
+    w2.file_idn,
+    w2.txn_date_d,
+
+    r.key,
     upper(trim(cast(r.region_country_code as varchar))) AS region_country_code_u,
-    upper(trim(cast(r.ird as varchar))) AS ird_rule_u
+    upper(trim(cast(r.ird as varchar))) AS ird_u,
+    try_cast(r.intelica_id as BIGINT) AS intelica_id_num,
+
+    r.rate_currency,
+    try_cast(r.rate_variable as DOUBLE) AS rate_variable,
+    try_cast(r.rate_fixed as DOUBLE)    AS rate_fixed,
+    try_cast(r.rate_min as DOUBLE)      AS rate_min,
+    try_cast(r.rate_cap as DOUBLE)      AS rate_cap,
+    cast(r.valid_from as DATE) AS valid_from,
+    cast(r.valid_until as DATE) AS valid_until
+
   FROM work2 w2
   JOIN rules r
-    -- match duro (reduce candidatos): jurisdicción vs region_country_code y ird
     ON w2.jurisdiction_u = upper(trim(cast(r.region_country_code as varchar)))
    AND w2.ird_u          = upper(trim(cast(r.ird as varchar)))
+
+   AND cast(r.valid_from as DATE) <= w2.txn_date_d
+   AND (r.valid_until IS NULL OR cast(r.valid_until as DATE) >= w2.txn_date_d)
 ),
+
 best_rule AS (
   SELECT *
   FROM (
     SELECT
-      b.id, b.file_id, b.ref_id, b.txn_date_d,
-      b.key,
-      b.region_country_code_u,
-      b.ird_rule_u AS ird_u,
-      try_cast(b.intelica_id as BIGINT) AS intelica_id_num,
-      row_number() over (partition by b.id order by b.key) as rn
+      b.*,
+
+      row_number() over (
+        partition by b.id
+        order by b.key
+      ) as rn
+
     FROM base b
     JOIN work2 w2 ON w2.id = b.id
+
     WHERE 1=1
 
-      -- 1) POSITIVOS: por cada (key,col) requerido, debe existir match en pos_vals
+      -- 1) POSITIVOS
       AND NOT EXISTS (
         SELECT 1
         FROM (SELECT DISTINCT key, col FROM pos_vals) req
@@ -641,7 +687,7 @@ best_rule AS (
           )
       )
 
-      -- 2) NEGATIVOS: si coincide con algún nv.val, la regla se descarta
+      -- 2) NEGATIVOS
       AND NOT EXISTS (
         SELECT 1
         FROM neg_vals nv
@@ -649,7 +695,7 @@ best_rule AS (
           AND {case_neg_val} = nv.val
       )
 
-      -- 3) POSITIVOS RANGO: por cada (key,col) requerido, debe calzar en algún rango
+      -- 3) POSITIVOS RANGO
       AND NOT EXISTS (
         SELECT 1
         FROM (SELECT DISTINCT key, col FROM pos_rng) reqr
@@ -663,7 +709,7 @@ best_rule AS (
           )
       )
 
-      -- 4) NEGATIVOS RANGO: si cae en un rango negativo, descarta regla
+      -- 4) NEGATIVOS RANGO
       AND NOT EXISTS (
         SELECT 1
         FROM neg_rng nr
@@ -671,70 +717,35 @@ best_rule AS (
           AND {case_neg_rng} BETWEEN nr.lo AND nr.hi
       )
 
-      -- 5) MONTO (si aplica)
+      -- 5) MONTO
       {amt_sql}
 
   ) x
   WHERE rn = 1
-),
-rver AS (
-  SELECT
-    key,
-    try_cast(intelica_id as BIGINT) AS intelica_id_num,
-    upper(trim(cast(region_country_code as varchar))) AS region_country_code_u,
-    upper(trim(cast(ird as varchar))) AS ird_u,
-    cast(valid_from as DATE) AS valid_from_d,
-    cast(valid_until as DATE) AS valid_until_d,
-    rate_currency,
-    try_cast(rate_variable as DOUBLE) AS rate_variable,
-    try_cast(rate_fixed as DOUBLE)    AS rate_fixed,
-    try_cast(rate_min as DOUBLE)      AS rate_min,
-    try_cast(rate_cap as DOUBLE)      AS rate_cap
-  FROM rules
-),
-best_with_rates AS (
-  SELECT
-    br.*,
-    rv.rate_currency,
-    rv.rate_variable,
-    rv.rate_fixed,
-    rv.rate_min,
-    rv.rate_cap,
-    rv.valid_from_d,
-    rv.valid_until_d,
-
-    row_number() over (
-      partition by br.id
-      order by
-        rv.valid_from_d desc nulls last
-    ) as rn2
-
-  FROM best_rule br
-  LEFT JOIN rver rv
-    ON rv.intelica_id_num = br.intelica_id_num
-   AND rv.region_country_code_u = br.region_country_code_u
-   AND rv.ird_u = br.ird_u
-   AND rv.valid_from_d <= br.txn_date_d
-   AND (rv.valid_until_d IS NULL OR rv.valid_until_d >= br.txn_date_d)
 )
+
 SELECT
   w2.id,
   w2.file_id,
   w2.ref_id,
-  coalesce(bwr.key, 0) AS rule,
-  bwr.region_country_code_u AS region_country_code,
-  cast(bwr.intelica_id_num as varchar) AS intelica_id,
-  coalesce(bwr.ird_u, upper(trim(cast(w2.ird as varchar)))) AS ird,
-  bwr.rate_currency,
-  bwr.rate_variable,
-  bwr.rate_fixed,
-  bwr.rate_min,
-  bwr.rate_cap,
-  bwr.valid_from_d AS valid_from,
-  bwr.valid_until_d AS valid_until
+  w2.file_idn,
+
+  coalesce(br.key, 0) AS rule,
+  br.region_country_code_u AS region_country_code,
+  cast(br.intelica_id_num as varchar) AS intelica_id,
+  coalesce(br.ird_u, upper(trim(cast(w2.ird as varchar)))) AS ird,
+
+  br.rate_currency,
+  br.rate_variable,
+  br.rate_fixed,
+  br.rate_min,
+  br.rate_cap,
+  br.valid_from,
+  br.valid_until
+
 FROM work2 w2
-LEFT JOIN (SELECT * FROM best_with_rates WHERE rn2 = 1) bwr
-  ON bwr.id = w2.id
+LEFT JOIN best_rule br
+  ON br.id = w2.id
 """
 
     # Ejecuta matching en DuckDB con work/rules y tablas auxiliares
@@ -748,7 +759,39 @@ LEFT JOIN (SELECT * FROM best_with_rates WHERE rn2 = 1) bwr
         con.register("neg_rng", df_neg_rng)
         con.register("amt", df_amt)
 
-        out_min = con.execute(sql).df()
+        debug_base_sql = """
+WITH
+work2 AS (
+  SELECT
+    w.*,
+    upper(trim(cast(w.jurisdiction as varchar))) AS jurisdiction_u,
+    upper(trim(cast(w.ird as varchar))) AS ird_u
+  FROM work w
+)
+SELECT
+  w2.id,
+  w2.file_id,
+  w2.ref_id,
+  r.key,
+  r.region_country_code,
+  r.ird
+FROM work2 w2
+JOIN rules r
+  ON w2.jurisdiction_u = upper(trim(cast(r.region_country_code as varchar)))
+ AND w2.ird_u          = upper(trim(cast(r.ird as varchar)))
+"""
+       
+        out_dir = Path.cwd() / "debug_rule_engine"   # se crea en tu carpeta actual (normalmente el repo) / "debug_rule_engine"
+        out_dir.mkdir(exist_ok=True)
+        with open(out_dir / "full_query_debug.sql", "w", encoding="utf-8") as f:
+            f.write(sql)
+        
+        out_min = con.execute(sql).df() # esto se mantiene
+        
+        df_base_debug = con.execute(debug_base_sql).df()
+        df_base_debug.to_csv(out_dir / "debug_base_candidates.csv", index=False)
+        
+        out_min.to_csv(out_dir / "out_min_debug.csv", index=False)
     finally:
         con.close()
 
@@ -805,9 +848,13 @@ def calculate_mastercard_fee(
     """
     CÁLCULO DEL FEE (APLICA RATE_VARIABLE / RATE_FIXED + MIN/CAP + FX)
 
+    Devuelve:
+      - calculated_fee: fee en moneda de la regla (rate_currency)
+      - calculated_fee_settlement: fee convertido a moneda de liquidación (settlement_report_currency_code)
+
     FIX:
-    - Evita upper(INTEGER) normalizando rate_currency y amount_transaction_currency a VARCHAR en a2
-    - Usa a2.rate_currency_u y a2.trx_currency_u en TODO el SQL (CASEs y JOIN)
+    - Evita upper(INTEGER) normalizando rate_currency, amount_transaction_currency y settlement_report_currency_code a VARCHAR
+    - Usa *_u en TODO el SQL (CASEs y JOINs)
     """
 
     df_ex = db.read_sql("""
@@ -841,8 +888,9 @@ def calculate_mastercard_fee(
             try_cast(a.txn_date AS DATE)             AS txn_date_d,
 
             -- ===== normalizados a texto (para upper/joins sin reventar) =====
-            nullif(upper(trim(cast(a.rate_currency as varchar))), '')              AS rate_currency_u,
-            nullif(upper(trim(cast(a.amount_transaction_currency as varchar))), '') AS trx_currency_u
+            nullif(upper(trim(cast(a.rate_currency as varchar))), '')                 AS rate_currency_u,
+            nullif(upper(trim(cast(a.amount_transaction_currency as varchar))), '')   AS trx_currency_u,
+            nullif(upper(trim(cast(a.settlement_report_currency_code as varchar))), '') AS settlement_currency_u
           FROM a
         ),
         ex2 AS (
@@ -858,26 +906,26 @@ def calculate_mastercard_fee(
             a2.*,
 
             -- =========================
-            -- FX multiplier
+            -- FX txn -> rule
             -- =========================
             CASE
                 WHEN a2.rate_currency_u IS NULL THEN 1.0
                 WHEN a2.rate_currency_u = a2.trx_currency_u THEN 1.0
-                ELSE ex2.exchange_value_num
+                ELSE ex_rule.exchange_value_num
             END AS fx_multiplier,
 
             -- =========================
-            -- Amount convertido
+            -- Amount convertido a moneda de la regla
             -- =========================
             a2.amount_transaction_num *
             CASE
                 WHEN a2.rate_currency_u IS NULL THEN 1.0
                 WHEN a2.rate_currency_u = a2.trx_currency_u THEN 1.0
-                ELSE ex2.exchange_value_num
+                ELSE ex_rule.exchange_value_num
             END AS amount_converted,
 
             -- =========================
-            -- Fee preliminar
+            -- Fee preliminar (en moneda de la regla)
             -- =========================
             (
                 coalesce(a2.rate_variable_num,0.0) *
@@ -886,14 +934,14 @@ def calculate_mastercard_fee(
                     CASE
                         WHEN a2.rate_currency_u IS NULL THEN 1.0
                         WHEN a2.rate_currency_u = a2.trx_currency_u THEN 1.0
-                        ELSE ex2.exchange_value_num
+                        ELSE ex_rule.exchange_value_num
                     END
                 )
             )
             + coalesce(a2.rate_fixed_num,0.0) AS fee_preliminary,
 
             -- =========================
-            -- Aplicar min / cap
+            -- Fee final (min/cap) en moneda de la regla
             -- =========================
             CASE
                 WHEN a2.rate_variable IS NULL
@@ -902,10 +950,10 @@ def calculate_mastercard_fee(
                 WHEN a2.rate_variable_num IS NULL THEN NULL
                 WHEN a2.amount_transaction_num IS NULL THEN NULL
 
-                -- si se necesitaba FX y no existe, devuelve NULL
+                -- si se necesitaba FX (txn->rule) y no existe, devuelve NULL
                 WHEN a2.rate_currency_u IS NOT NULL
                  AND a2.rate_currency_u <> a2.trx_currency_u
-                 AND ex2.exchange_value_num IS NULL
+                 AND ex_rule.exchange_value_num IS NULL
                 THEN NULL
 
                 ELSE
@@ -920,25 +968,64 @@ def calculate_mastercard_fee(
                                     CASE
                                         WHEN a2.rate_currency_u IS NULL THEN 1.0
                                         WHEN a2.rate_currency_u = a2.trx_currency_u THEN 1.0
-                                        ELSE ex2.exchange_value_num
+                                        ELSE ex_rule.exchange_value_num
                                     END
                                 )
                             )
                             + coalesce(a2.rate_fixed_num,0.0)
                         )
                     )
-            END AS calculated_fee
+            END AS calculated_fee,
+
+            -- =========================
+            -- FX rule -> settlement
+            -- =========================
+            CASE
+                WHEN a2.settlement_currency_u IS NULL THEN 1.0
+                WHEN a2.rate_currency_u IS NULL THEN 1.0
+                WHEN a2.rate_currency_u = a2.settlement_currency_u THEN 1.0
+                ELSE ex_settle.exchange_value_num
+            END AS fx_rule_to_settlement,
+
+            -- =========================
+            -- Fee convertido a moneda de liquidación
+            -- =========================
+            CASE
+                -- si no hay moneda settlement, dejamos el fee en moneda de regla
+                WHEN a2.settlement_currency_u IS NULL THEN calculated_fee
+                -- si la regla no define moneda, no convertimos
+                WHEN a2.rate_currency_u IS NULL THEN calculated_fee
+                -- si ya está en la misma moneda
+                WHEN a2.rate_currency_u = a2.settlement_currency_u THEN calculated_fee
+                -- si se necesita FX y no existe
+                WHEN ex_settle.exchange_value_num IS NULL THEN NULL
+                ELSE calculated_fee * ex_settle.exchange_value_num
+            END AS calculated_fee_settlement
 
         FROM a2
-        LEFT JOIN ex2
-          ON ex2.rate_date_d = a2.txn_date_d
-         AND ex2.currency_from_u = a2.trx_currency_u
-         AND ex2.currency_to_u   = a2.rate_currency_u
-         AND ex2.brand_u = upper('{brand_fx_eval}')
+
+        -- FX txn -> rule
+        LEFT JOIN ex2 ex_rule
+          ON ex_rule.rate_date_d = a2.txn_date_d
+         AND ex_rule.currency_from_u = a2.trx_currency_u
+         AND ex_rule.currency_to_u   = a2.rate_currency_u
+         AND ex_rule.brand_u = upper('{brand_fx_eval}')
+
+        -- FX rule -> settlement
+        LEFT JOIN ex2 ex_settle
+          ON ex_settle.rate_date_d = a2.txn_date_d
+         AND ex_settle.currency_from_u = a2.rate_currency_u
+         AND ex_settle.currency_to_u   = a2.settlement_currency_u
+         AND ex_settle.brand_u = upper('{brand_fx_eval}')
         """
+
+        out_dir = Path.cwd() / "debug_rule_engine"   # se crea en tu carpeta actual (normalmente el repo) / "debug_rule_engine"
+        out_dir.mkdir(exist_ok=True)
+      
+        df_base_fin = con.execute(sql).df()
+        df_base_fin.to_csv(out_dir / "df_base_fin.csv", index=False)
 
         return con.execute(sql).df()
 
     finally:
         con.close()
-
