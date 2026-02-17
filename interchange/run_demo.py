@@ -156,21 +156,21 @@ def pipeline_mc_1240(client_id: str, file_id: str):
     #     file_id, # file_id (md5)
     # )
 
-    timed(
-        mc_calculate.calculate_1240_fields, 
-        layer.STAGING, # origin_target
-        layer.STAGING, # target_target
-        client_id, # client_id (bank)
-        file_id, # file_id (md5)
-    )
-    
     # timed(
-    #     mc_interchange.interchange_1240_fields, 
+    #     mc_calculate.calculate_1240_fields, 
     #     layer.STAGING, # origin_target
     #     layer.STAGING, # target_target
     #     client_id, # client_id (bank)
     #     file_id, # file_id (md5)
     # )
+    
+    timed(
+        mc_interchange.interchange_1240_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
 
 def pipeline_mc_1442(client_id: str, file_id: str):
 

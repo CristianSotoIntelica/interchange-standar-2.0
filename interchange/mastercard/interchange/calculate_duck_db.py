@@ -393,9 +393,9 @@ def assign_rules(
         out["valid_until"] = pd.NaT
         return _merge_extras(out, work, extras)
     
-    pd.set_option("display.max_columns", None)
-    pd.set_option("display.width", None)
-    pd.set_option("display.max_colwidth", None)
+    # pd.set_option("display.max_columns", None)
+    # pd.set_option("display.width", None)
+    # pd.set_option("display.max_colwidth", None)
 
     #VALIDAR REGLAS
     # print(

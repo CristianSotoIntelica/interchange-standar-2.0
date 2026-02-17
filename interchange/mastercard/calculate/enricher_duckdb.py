@@ -476,37 +476,9 @@ def calculate_settlement_report_duckdb(
     con = duckdb.connect()
 
     try:
-        out_dir = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
-        df_ex_rate.to_csv(out_dir / f"df_ex_rate.csv", index=False)
-
-        df_pre2.to_csv(out_dir / f"df_pre2.csv", index=False)
-
-        df_cur.to_csv(out_dir / f"df_cur.csv", index=False)
-        
-
         con.register("de", df_ex_rate)
         con.register("cf", df_pre2)
         con.register("cur", df_cur)
-
-        # q = r"""
-        # SELECT 
-        # de.ref_id, de.file_id, de.file_idn,
-        # de.amount_transaction,
-        # de.exchange_value_local,
-        # de.exchange_value_settlement
-        # FROM read_csv_auto(
-        # 'c:/Users/daniel.olivera/Documents/Intelica/apps/interchange-standar-2.0/tst/df_ex_rate.csv',
-        # nullstr=['NaN','']
-        # ) de
-        # WHERE de.file_type <> 'IN'
-        # AND (de.exchange_value_local IS NOT NULL OR de.exchange_value_settlement IS NOT NULL)
-        # ORDER BY
-        # abs(try_cast(de.amount_transaction AS DOUBLE))
-        # * abs(coalesce(try_cast(de.exchange_value_local AS DOUBLE),
-        #                 try_cast(de.exchange_value_settlement AS DOUBLE))) DESC
-        # LIMIT 50;
-        # """
-        # print(con.execute(q).df())
 
         sql = f"""
         SELECT
