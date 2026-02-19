@@ -324,6 +324,13 @@ def calculate_ex_rate_duckdb(
     con = duckdb.connect()
 
     try:
+
+        # out_dir = Path("/home/ameza/IntelicaProyectos/standard-2.0/interchange-standar-2.0/tst")
+
+        # df_client .to_csv(out_dir / f"df_client.csv", index=False)
+        # df_curr.to_csv(out_dir / f"df_curr.csv", index=False)
+        # df_ex.to_csv(out_dir / f"ex.csv", index=False)
+        
         con.register("cus", df_client)
         con.register("cur", df_curr)
         con.register("ex", df_ex)
@@ -476,9 +483,11 @@ def calculate_settlement_report_duckdb(
     con = duckdb.connect()
 
     try:
+    
         con.register("de", df_ex_rate)
         con.register("cf", df_pre2)
         con.register("cur", df_cur)
+        
 
         sql = f"""
         SELECT
@@ -501,11 +510,11 @@ def calculate_settlement_report_duckdb(
                 CASE
                     WHEN cf.jurisdiction IN ('on-us','off-us') AND try_cast(de.currency_code_transaction AS INTEGER) = try_cast(de.local_currency_code_numeric AS INTEGER) THEN 
                         CASE
-                            WHEN de.exchange_value_local IS NOT NULL THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_local AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
+                            WHEN de.exchange_value_local IS NOT NULL THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(38,4)) * try_cast(de.exchange_value_local AS DECIMAL(38,10)), 4) AS DECIMAL(18, 4))
                         END
                     ELSE
                         CASE
-                            WHEN (de.exchange_value_settlement IS NOT NULL) THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(18,4)) * try_cast(de.exchange_value_settlement AS DECIMAL(18,10)), 4) AS DECIMAL(18, 4))
+                            WHEN (de.exchange_value_settlement IS NOT NULL) THEN CAST(round(try_cast(de.amount_transaction AS DECIMAL(38,4)) * try_cast(de.exchange_value_settlement AS DECIMAL(38,10)), 4) AS DECIMAL(18, 4))
                         END
                 END
         END AS settlement_report_amount
