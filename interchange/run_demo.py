@@ -254,10 +254,10 @@ if __name__ == "__main__":
     # client_id = "BRDRO"
     # file_id = "e0cdccf3be383ecd2c8044b40c02be44"
         
-    client_id = "BTRLRO"
+    # client_id = "BTRLRO"
     #file_id = "a3711894ebf22d0583df63cc5b5232dc" # incoming
     # file_id = "3bbe11a245223ecb2ebfb46b6d2c9f36" # incoming
-    file_id = "927e539ab0e66cbcf48cd6043cac1d47" # outgoing (block)
+    # file_id = "927e539ab0e66cbcf48cd6043cac1d47" # outgoing (block)
 
     #client_id = "SBSA"
     #file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
@@ -269,13 +269,18 @@ if __name__ == "__main__":
     # file_id = "28ef73ae78c526c130fccb618a581359" # outgoing (no block)
     # file_id = "cda240036fbee87e93277789a703b8e5" # outgoing (no block)
 
+    client_id = "EURBGR"
+    # file_id = "218175802e6785fe6e432a43328097be"
+    file_id = "b7f58af0ab1ca70c077c9da1f189f976"
+    # file_id = "02c14e0dc220c139e7a69b0abcad1443"
+
     # pipeline_visa_baseii(client_id, file_id)
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
     
-    # pipeline_mc_interpreter(client_id,file_id)
+    pipeline_mc_interpreter(client_id,file_id)
     # pipeline_mc_1644(client_id=client_id, file_id=file_id)
-    pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    # pipeline_mc_1240(client_id=client_id, file_id=file_id)
     # pipeline_mc_1442(client_id=client_id, file_id=file_id)
     # pipeline_mc_1740(client_id=client_id, file_id=file_id)
     
