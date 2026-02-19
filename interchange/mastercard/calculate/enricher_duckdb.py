@@ -621,3 +621,4 @@ def calculate_calculated_fields_duckdb(
     
     finally:
         con.close()
+
