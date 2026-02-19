@@ -132,37 +132,37 @@ def pipeline_mc_interpreter(client_id: str, file_id: str):
 
 def pipeline_mc_1240(client_id: str, file_id: str):
 
-    # timed(
-    #     mc_transform.transform_ipm_1240, # Function
-    #     layer.STAGING, # origin_layer
-    #     layer.STAGING, # target_layer
-    #     client_id, # client_id (bank)
-    #     file_id # file_id (md5)
-    # )
+    timed(
+        mc_transform.transform_ipm_1240, # Function
+        layer.STAGING, # origin_layer
+        layer.STAGING, # target_layer
+        client_id, # client_id (bank)
+        file_id # file_id (md5)
+    )
 
-    # timed(
-    #     mc_extract.extract_1240_fields, 
-    #     layer.STAGING, # origin_target
-    #     layer.STAGING, # target_target
-    #     client_id, # client_id (bank)
-    #     file_id, # file_id (md5)
-    # )
+    timed(
+        mc_extract.extract_1240_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
 
-    # timed(
-    #     mc_clean.clean_1240_fields, 
-    #     layer.STAGING, # origin_target
-    #     layer.STAGING, # target_target
-    #     client_id, # client_id (bank)
-    #     file_id, # file_id (md5)
-    # )
+    timed(
+        mc_clean.clean_1240_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
 
-    # timed(
-    #     mc_calculate.calculate_1240_fields, 
-    #     layer.STAGING, # origin_target
-    #     layer.STAGING, # target_target
-    #     client_id, # client_id (bank)
-    #     file_id, # file_id (md5)
-    # )
+    timed(
+        mc_calculate.calculate_1240_fields, 
+        layer.STAGING, # origin_target
+        layer.STAGING, # target_target
+        client_id, # client_id (bank)
+        file_id, # file_id (md5)
+    )
     
     timed(
         mc_interchange.interchange_1240_fields, 
@@ -253,8 +253,15 @@ def pipeline_mc_1740(client_id: str, file_id: str):
 if __name__ == "__main__":
     #client_id = "SBSA"
     #file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
-    client_id = "BRDRO"
-    file_id = "e0cdccf3be383ecd2c8044b40c02be44"
+
+    # client_id = "SBSA"
+    # file_id = "1498114d1ff88956976706eee4b58604"
+
+    client_id = "EURBGR"
+    file_id = "218175802e6785fe6e432a43328097be"
+    
+    # client_id = "BRDRO"
+    # file_id = "e0cdccf3be383ecd2c8044b40c02be44"
     # client_id = "SBSA"
     # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
     
@@ -276,11 +283,11 @@ if __name__ == "__main__":
     # pipeline_visa_sms(client_id, file_id)
     # pipeline_visa_vss(client_id, file_id)
     
-    #pipeline_mc_interpreter(client_id,file_id)
+    pipeline_mc_interpreter(client_id,file_id)
     #pipeline_mc_1644(client_id=client_id, file_id=file_id)
-    pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    #pipeline_mc_1240(client_id=client_id, file_id=file_id)
     #pipeline_mc_1442(client_id=client_id, file_id=file_id)
-    #pipeline_mc_1740(client_id=client_id, file_id=file_id)
+    #(client_id=client_id, file_id=file_id)
     
     #print("\n--- Tiempos de ejecución por función ---")
     for func_name, t in times.items():
