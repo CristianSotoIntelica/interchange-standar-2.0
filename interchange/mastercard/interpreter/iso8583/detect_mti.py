@@ -19,16 +19,16 @@ def detect_mti(payload: bytes):
     """
     
     if len(payload) < 4:
-        return None, None
+        return None, None, None
 
     m4 = payload[:4]
 
     # ASCII 0–9
     if all(0x30 <= b <= 0x39 for b in m4):
-        return m4.decode("ascii"), "ASCII"
+        return m4.decode("ascii"), "ASCII", 'ascii'
 
     # EBCDIC F0–F9 (solo dígitos)
     if all(0xF0 <= b <= 0xF9 for b in m4):
-        return "".join(str(b - 0xF0) for b in m4), "EBCDIC_DIGITS"
+        return "".join(str(b - 0xF0) for b in m4), "EBCDIC_DIGITS", 'cp500'
 
-    return None, None
+    return None, None, None
