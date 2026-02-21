@@ -11,7 +11,9 @@ from interchange.persistence.database import Database
 from interchange.persistence.file import FileStorage
 
 from interchange.mastercard.interpreter.io.unblock import unblock_1014
-from interchange.mastercard.interpreter.io.message_reader import read_len_prefixed_messages
+from interchange.mastercard.interpreter.io.message_reader import (
+    read_len_prefixed_messages, read_len_prefixed_messages_variable
+    )
 
 from interchange.mastercard.interpreter.iso8583.dataelements import Parameters
 from interchange.mastercard.interpreter.iso8583.parse_format import (
@@ -131,9 +133,6 @@ def interpretate_msg(
         origin_layer, target_layer, client_id: str, file_id: str, origin_subdir="", 
         target_sub_dir="", test_path: str = "") -> None:
     
-    #########################  TESTING  ################################################
-    tst_path = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
-    #########################  /TESTING  ################################################
     # 1) Leer el archivo binario
     stream_file = _load_as_binary(
         origin_layer, client_id, file_id, subdir=origin_subdir)
@@ -143,21 +142,26 @@ def interpretate_msg(
     need_unblock = db.needs_unblock_for_file(client_id=client_id, file_id=file_id)
 
     if need_unblock:
-        print("AAAAA")
         unblocked_bytes = unblock_1014(stream_file=stream_file)
     else:
         stream_file.seek(0)    
         unblocked_bytes = stream_file.read()
-    #########################  TESTING  ################################################
-    if tst_path:
-        out_txt = tst_path / f"{client_id}_{file_id}_unblocked_hex_tst_cambio_2.bin"
-
-        out_bin = out_txt
-        out_bin.write_bytes(unblocked_bytes)
-    
-    #########################  /TESTING  ################################################
     # 3) Lee nuevamente al archivo binario nuevo, delvuele un arreglo de body/bitmap en HEX con su message type y lo guarda en un DF
-    rows = read_len_prefixed_messages(io.BytesIO(unblocked_bytes), as_hex=False)
+
+    need_interpreter_fix = db.needs_interpreter_fix(client_id=client_id, file_id=file_id)
+    
+    print(need_interpreter_fix)
+    if need_interpreter_fix == True:
+        rows = read_len_prefixed_messages(
+            io.BytesIO(unblocked_bytes), 
+            as_hex=False
+        )
+    elif need_interpreter_fix == False:
+        rows = read_len_prefixed_messages_variable(
+            io.BytesIO(unblocked_bytes),
+            as_hex=False,
+            encoding="cp500"
+        )
 
     df = pd.DataFrame(rows)
 
@@ -165,13 +169,6 @@ def interpretate_msg(
     df_export = df.loc[:, [c for c in cols if c in df.columns]].copy()
     if "fields" in df_export.columns:
         df_export["fields"] = df_export["fields"].map(lambda x: str(x) if x is not None else "")
-
-    df_export.to_csv(
-        tst_path / f"{client_id}_{file_id}_details_pre_cambios.csv",
-        index=False,
-        encoding="utf-8",
-    )
-    #########################  TESTING  ################################################
 
     del rows
     

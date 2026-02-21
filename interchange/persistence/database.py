@@ -220,6 +220,40 @@ class Database:
                 continue
         return False
     
+    def needs_interpreter_fix(self, client_id: str, file_id: str) -> bool:
+        # Obtener file_type desde file_control
+        df_cf = self.read_records(
+            table_name="file_control", fields=["file_type", "brand_id", "landing_file_name"], 
+            where={"client_id": client_id, "file_id": file_id})
+
+        if df_cf.empty:
+            return False
+        
+        file_type = df_cf.iloc[0]["file_type"].strip().upper()
+
+        brand_id = df_cf.iloc[0]["brand_id"].strip().upper()
+
+        landing_file_name = str(df_cf.iloc[0]["landing_file_name"] or "").strip()
+
+        # Consultar reglas por client_id + brand_id + file_type
+        df_rx = self.read_records(
+            table_name="file_name_regex_param", fields=["file_format", "interpreter_fix"], 
+            where={"client_id": client_id, "brand_id": brand_id, 
+                   "file_type": file_type})
+        
+        # Si hay coincidencia, validar filename
+        if df_rx.empty:
+            return False 
+    
+        for _, row in df_rx.iterrows():
+            pattern = str(row["file_format"]).strip()
+            try:
+                if re.match(pattern=pattern, string=landing_file_name, flags=re.IGNORECASE):
+                    return self._to_bool(row["interpreter_fix"])
+            except re.error as e:
+                continue
+        return False
+    
 
     def read_sql(self, sql: str, params: tuple = ()) -> DataFrame:
         """
