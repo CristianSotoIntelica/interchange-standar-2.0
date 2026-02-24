@@ -251,6 +251,21 @@ def pipeline_mc_1740(client_id: str, file_id: str):
     )
 
 if __name__ == "__main__":
+    #client_id = "SBSA"
+    #file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+
+    # client_id = "SBSA"
+    # file_id = "1498114d1ff88956976706eee4b58604"
+
+    client_id = "EURBGR"
+    file_id = "218175802e6785fe6e432a43328097be"
+    
+    # client_id = "BRDRO"
+    # file_id = "e0cdccf3be383ecd2c8044b40c02be44"
+    # client_id = "SBSA"
+    # file_id = "85e91f44241d19d8bf23ce97d2bf49c9"
+    
+    #client_id = "BTRLRO"
     # client_id = "BRDRO"
     # file_id = "e0cdccf3be383ecd2c8044b40c02be44"
 
@@ -286,6 +301,10 @@ if __name__ == "__main__":
     # pipeline_visa_vss(client_id, file_id)
     
     pipeline_mc_interpreter(client_id,file_id)
+    #pipeline_mc_1644(client_id=client_id, file_id=file_id)
+    #pipeline_mc_1240(client_id=client_id, file_id=file_id)
+    #pipeline_mc_1442(client_id=client_id, file_id=file_id)
+    #(client_id=client_id, file_id=file_id)
     # pipeline_mc_1644(client_id=client_id, file_id=file_id)
     # pipeline_mc_1240(client_id=client_id, file_id=file_id)
     # pipeline_mc_1442(client_id=client_id, file_id=file_id)

@@ -7,6 +7,8 @@ from interchange.persistence.file import FileStorage
 from interchange.mastercard.interchange.calculate_duck_db import (
     calculate_pre_eval, assign_rules, calculate_mastercard_fee
 )
+
+
 fs = FileStorage()
 db = Database()
 log = Logger(__name__)
@@ -72,16 +74,14 @@ def interchange_1240_fields(
                 file_id=file_id
             )
             
-            df_assign = assign_rules(df_eval=df_evaluate, db=db)
-           
-            
+            df_assign = assign_rules(df_eval=df_evaluate, db=db, extras=None, partition=None)
+
             df_fee = calculate_mastercard_fee(
                   df_assign=df_assign,
                   db=db,
                   brand_fx_eval="MASTERCARD",
             )
-            print("sum fee:", df_fee["calculated_fee"].sum(skipna=True))
-            print(df_fee["rule"].value_counts().head())
+            
             out_fp = fs.build_target_parquet_filepath_from_raw(
                 raw_filepath=txn_path,
                 target_layer=target_layer,
