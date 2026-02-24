@@ -2,7 +2,7 @@ from typing import BinaryIO
 
 def unblock_1014(
     stream_file: BinaryIO, payload_size: int = 1012, sep_size: int = 2, 
-    valid_seps: tuple[bytes, ...] = (b"", b"\x20\x20", b"\x40\x40")) -> bytes:
+    valid_seps: tuple[bytes, ...] = (b"", b"\x20\x20", b"\x40\x40", b"\x00\x00")) -> bytes:
     
     stream_file.seek(0)
     out_bytes = bytearray()

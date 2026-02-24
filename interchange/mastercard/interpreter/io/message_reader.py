@@ -2,13 +2,22 @@ from interchange.mastercard.interpreter.iso8583.detect_mti import detect_mti
 from interchange.mastercard.interpreter.iso8583.split_mti import split_mti_bitmap_body
 import interchange.mastercard.interpreter.iso8583.dataelements as de
 
+from interchange.persistence.database import Database
 from interchange.logs.logger import Logger
 from typing import BinaryIO, List, Dict, Any, Optional
 import struct
 
 log = Logger(__name__)
 
-def read_len_prefixed_messages(stream, *, as_hex: bool =True):
+def read_len_prefixed_messages(
+    stream, 
+    *, 
+    as_hex: bool =True,
+    client_id : str, 
+    file_id: str, 
+    db: Database,
+    encoding: str,
+):
     """
     Lee [4 bytes len] + [payload]
     Devuelve rows con body/bitmap en HEX.
@@ -17,12 +26,17 @@ def read_len_prefixed_messages(stream, *, as_hex: bool =True):
     pos = 0
     msg_no = 0
 
+    # TODO: RETIRAR OBTENER ENCODING A PARTIR DEL DETECT_MTI. YA QUE 
+    # EL DETECT_MTI GOLPEARA N VECCES A LA BD DE ACUERDO A LOS N ROWS QUE SE TENGAN
+    # EXTRAER LA CONSULTA DE ENCODING PARA 
     while True:
         raw_len = stream.read(4)
         if len(raw_len) < 4:
             break
 
         msg_len = struct.unpack(">i", raw_len)[0]
+        # print(f"raw_len: {raw_len}")
+        # print(f"msg_len: {msg_len}")
         if msg_len <= 0:
             break
 
@@ -30,10 +44,15 @@ def read_len_prefixed_messages(stream, *, as_hex: bool =True):
         if len(payload) < msg_len:
             break
 
-        msg_no += 1
-        mti, enc = detect_mti(payload)
+        msg_no = msg_no + 1 
+        mti, enc = detect_mti(
+            payload=payload,
+            encoding=encoding
+        )
 
-        parts = split_mti_bitmap_body(payload)
+        # print(f"mti: {mti}")
+
+        parts = split_mti_bitmap_body(payload=payload)
         if parts is None:
             row = {
                 "msg_no": msg_no,
@@ -41,14 +60,14 @@ def read_len_prefixed_messages(stream, *, as_hex: bool =True):
                 "msg_len": msg_len,
                 "mti": mti,
                 "enc": enc,
-                "parse_ok": False,
+                "parse_ok": False
             }
             if as_hex:
                 row["bitmap_hex"] = None
                 row["body_hex"] = payload.hex()
             else:
                 row["bitmap"] = None
-                row["body"] = payload  # bytes (solo debug; no se parsea)
+                row["body"] = payload
             rows.append(row)
         else:
             mti_bytes, bitmap, body, fields, has_secondary = parts
@@ -59,7 +78,7 @@ def read_len_prefixed_messages(stream, *, as_hex: bool =True):
                 "mti": mti,
                 "enc": enc,
                 "parse_ok": True,
-                "fields" : fields,
+                "fields": fields,
             }
             if as_hex:
                 row["bitmap_hex"] = bitmap.hex()
@@ -68,9 +87,68 @@ def read_len_prefixed_messages(stream, *, as_hex: bool =True):
                 row["bitmap"] = bitmap
                 row["body"] = body
             rows.append(row)
-
-        pos += 4 + msg_len
+        # print(rows)
+        pos = pos + 4 + msg_len
     return rows
+
+
+    # while True:
+    #     raw_len = stream.read(4)
+    #     if len(raw_len) < 4:
+    #         break
+
+    #     msg_len = struct.unpack(">i", raw_len)[0]
+    #     if msg_len <= 0:
+    #         break
+
+    #     payload = stream.read(msg_len)
+    #     if len(payload) < msg_len:
+    #         break
+
+    #     msg_no += 1
+    #     mti, enc = detect_mti(
+    #         payload=payload, 
+    #         encoding=encoding
+    #     )
+
+    #     parts = split_mti_bitmap_body(payload)
+    #     if parts is None:
+    #         row = {
+    #             "msg_no": msg_no,
+    #             "offset": pos,
+    #             "msg_len": msg_len,
+    #             "mti": mti,
+    #             "enc": enc,
+    #             "parse_ok": False,
+    #         }
+    #         if as_hex:
+    #             row["bitmap_hex"] = None
+    #             row["body_hex"] = payload.hex()
+    #         else:
+    #             row["bitmap"] = None
+    #             row["body"] = payload  # bytes (solo debug; no se parsea)
+    #         rows.append(row)
+    #     else:
+    #         mti_bytes, bitmap, body, fields, has_secondary = parts
+    #         row = {
+    #             "msg_no": msg_no,
+    #             "offset": pos,
+    #             "msg_len": msg_len,
+    #             "mti": mti,
+    #             "enc": enc,
+    #             "parse_ok": True,
+    #             "fields" : fields,
+    #         }
+    #         if as_hex:
+    #             row["bitmap_hex"] = bitmap.hex()
+    #             row["body_hex"] = body.hex()
+    #         else:
+    #             row["bitmap"] = bitmap
+    #             row["body"] = body
+    #         rows.append(row)
+
+    #     pos += 4 + msg_len
+    # return rows
 
 def _bitmap_to_fields_1_128(bitmap_16: bytes) -> List[int]:
     fields = []
@@ -87,7 +165,11 @@ def read_len_prefixed_messages_variable(
     stream: BinaryIO,
     *,
     as_hex: bool = False,
-    encoding: str = "cp500",
+    client_id : str, 
+    file_id: str, 
+    db: Database,
+    encoding: str,
+    # encoding: str = "cp500",
 ) -> List[Dict[str, Any]]:
     """
     Reader estilo estructura ISO, no depende del msg_len:
@@ -104,7 +186,6 @@ def read_len_prefixed_messages_variable(
     base0 = stream.tell()
 
     while True:
-
         msg_start = stream.tell()
 
         raw_len = stream.read(4)
@@ -124,11 +205,13 @@ def read_len_prefixed_messages_variable(
             break
 
         mti_bytes, bitmap_16 = struct.unpack("4s16s", message_total)
-
-        mti, enc = detect_mti(mti_bytes)  # robusto para EBCDIC digits
-
+        # print(f"mti_bytes: {mti_bytes} and bitmap_16: {bitmap_16}")
+        mti, enc = detect_mti(
+            payload=mti_bytes,
+            encoding=encoding
+        )  # robusto para EBCDIC digits
+        # TODO: EXTRRAER ENCODING
         fields_present = _bitmap_to_fields_1_128(bitmap_16)
-
         body_bytes = bytearray()
 
         parse_ok = True
@@ -136,7 +219,6 @@ def read_len_prefixed_messages_variable(
         for i in range(2, 129):
             if i not in fields_present:
                 continue
-
             if parameters[i]["fixed"]:
                 de_len = parameters[i]["length"]
                 v = stream.read(de_len)
@@ -192,4 +274,5 @@ def read_len_prefixed_messages_variable(
 
         rows.append(row)
 
+    # print(rows)
     return rows

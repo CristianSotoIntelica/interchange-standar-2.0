@@ -15,6 +15,8 @@ from interchange.mastercard.interpreter.io.message_reader import (
     read_len_prefixed_messages, read_len_prefixed_messages_variable
     )
 
+from interchange.mastercard.interpreter.iso8583.detect_encoding import obtain_encoding
+
 from interchange.mastercard.interpreter.iso8583.dataelements import Parameters
 from interchange.mastercard.interpreter.iso8583.parse_format import (
     build_wide_row, 
@@ -32,10 +34,6 @@ from interchange.mastercard.interpreter.storage.classified_block_mti import (
 log = Logger(__name__)
 fs = FileStorage()
 DE_SPEC = Parameters().getdataelements()
-
-
-##############################################
-
 
 def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -64,7 +62,11 @@ def add_block_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _load_as_binary(
-        layer: FileStorage.Layer, client_id: str, file_id: str, subdir="") -> BinaryIO:
+        layer: FileStorage.Layer, 
+        client_id: str, 
+        file_id: str, 
+        subdir=""
+) -> BinaryIO:
     return fs.read_binary(fs.Layer.LANDING, client_id, file_id, subdir, True)
 
 def build_block_state_from_headers_695(
@@ -130,17 +132,31 @@ def build_block_state_from_headers_695(
     return block_state
 
 def interpretate_msg(
-        origin_layer, target_layer, client_id: str, file_id: str, origin_subdir="", 
-        target_sub_dir="", test_path: str = "") -> None:
+        origin_layer, 
+        target_layer, 
+        client_id: str, 
+        file_id: str, 
+        origin_subdir="", 
+        target_sub_dir="", 
+        test_path: str = ""
+) -> None:
     
     # 1) Leer el archivo binario
     stream_file = _load_as_binary(
-        origin_layer, client_id, file_id, subdir=origin_subdir)
+        origin_layer, 
+        client_id, 
+        file_id, 
+        subdir=origin_subdir
+    )
 
     # 2) Elimina los bloqueantes
     db = Database()
-    need_unblock = db.needs_unblock_for_file(client_id=client_id, file_id=file_id)
 
+    need_unblock = db.needs_unblock_for_file(
+        client_id=client_id, 
+        file_id=file_id
+    )
+    
     if need_unblock:
         unblocked_bytes = unblock_1014(stream_file=stream_file)
     else:
@@ -148,22 +164,48 @@ def interpretate_msg(
         unblocked_bytes = stream_file.read()
     # 3) Lee nuevamente al archivo binario nuevo, delvuele un arreglo de body/bitmap en HEX con su message type y lo guarda en un DF
 
-    need_interpreter_fix = db.needs_interpreter_fix(client_id=client_id, file_id=file_id)
-    
-    print(need_interpreter_fix)
+
+    # Validar si requiere el interpretador fijo (version 1) o interpretador variable (version 2)
+    need_interpreter_fix = db.needs_interpreter_fix(
+        client_id=client_id, 
+        file_id=file_id
+    )
+
+    file_mc_encoding = obtain_encoding(
+        db=db, 
+        client_id=client_id, 
+        file_id=file_id
+    )
+
+    file_mc_encoding = str(file_mc_encoding)
+
+    print(f"Type_encoding: {file_mc_encoding}")
+    print(f"Need unblock?: {need_unblock}")
+    print(f"need_intrepreter_fix: {need_interpreter_fix}")
+
+
     if need_interpreter_fix == True:
         rows = read_len_prefixed_messages(
-            io.BytesIO(unblocked_bytes), 
-            as_hex=False
+            stream=io.BytesIO(unblocked_bytes), 
+            as_hex=False,
+            client_id=client_id,
+            file_id=file_id,
+            db=db,
+            encoding=file_mc_encoding,
         )
     elif need_interpreter_fix == False:
         rows = read_len_prefixed_messages_variable(
-            io.BytesIO(unblocked_bytes),
+            stream=io.BytesIO(unblocked_bytes),
             as_hex=False,
-            encoding="cp500"
+            client_id=client_id,
+            file_id=file_id,
+            db=db,
+            encoding=file_mc_encoding
         )
 
     df = pd.DataFrame(rows)
+    print(df.head(15))
+    print(len(df))
 
     cols = ["msg_no", "offset", "msg_len", "mti", "enc", "parse_ok", "fields"]
     df_export = df.loc[:, [c for c in cols if c in df.columns]].copy()
@@ -204,7 +246,11 @@ def interpretate_msg(
   
     n = len(df)
    
-    block_state = build_block_state_from_headers_695(df, schema=schema, de_spec=DE_SPEC)
+    block_state = build_block_state_from_headers_695(
+        df, 
+        schema=schema, 
+        de_spec=DE_SPEC
+    )
     
     for start in range(0, n, BATCH_SIZE):
         base_chunk = df.iloc[start:start+BATCH_SIZE]

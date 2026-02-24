@@ -1,5 +1,8 @@
 
-def detect_mti(payload: bytes):
+def detect_mti(
+    payload: bytes, 
+    encoding: str,
+):
     """
 
     Esta función intenta adivinar si un mensaje empieza con un MTI válido (Message Type Indicator) - ISO-8583
@@ -20,15 +23,11 @@ def detect_mti(payload: bytes):
     
     if len(payload) < 4:
         return None, None
-
-    m4 = payload[:4]
-
-    # ASCII 0–9
-    if all(0x30 <= b <= 0x39 for b in m4):
+    
+    m4 = payload[:4] 
+    if encoding.upper() in ("LATIN-1", "LATIN1", "ISO-8859-1", "ASCII"):
         return m4.decode("ascii"), "ASCII"
-
-    # EBCDIC F0–F9 (solo dígitos)
-    if all(0xF0 <= b <= 0xF9 for b in m4):
+    elif encoding.upper() in ("CP500", "EBCDIC", "EBCDIC_DIGITS"):
         return "".join(str(b - 0xF0) for b in m4), "EBCDIC_DIGITS"
-
-    return None, None
+    else:
+        return None, None

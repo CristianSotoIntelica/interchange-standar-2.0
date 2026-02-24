@@ -266,6 +266,7 @@ class Database:
             rows = cur.fetchall()
             cols = [d[0] for d in cur.description] if cur.description else []
             cur.close()
+            log.logger.debug("Attempting to execute SELECT ARBITRARY SQL statement")
             return pd.DataFrame(rows, columns=cols)
         except sqlite3.Error as e:
             log.logger.error(f"Error executing read_sql: '{e}' ")
