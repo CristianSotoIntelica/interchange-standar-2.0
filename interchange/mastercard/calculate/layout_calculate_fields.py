@@ -142,4 +142,5 @@ CALCULATE_FIELDS_FINAL = {
     "settlement_report_currency_code": "string",
     "settlement_report_amount": {"dtype": "decimal", "precision": 18, "scale": 4},
     "iar_country": "string",
+    "exclude_flag" : "int64",
 }

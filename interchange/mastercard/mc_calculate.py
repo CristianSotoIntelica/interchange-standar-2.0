@@ -11,7 +11,7 @@ from interchange.mastercard.calculate.enricher_duckdb import (
     calculate_calculated_fields_duckdb
 )
 from interchange.mastercard.calculate.exclude_flag import (
-    build_lookup_691, df_exclude_flag, 
+    build_lookup_691, create_df_exclude_flag, add_exclude_flag
 )
 
 from interchange.mastercard.calculate.calculate_schema import build_arrow_schema_from_layout
@@ -59,7 +59,7 @@ def calculate_1240_fields(
     iar_file_dt = None
 
     #################################TESTING############################################
-    out_dir = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
+    # out_dir = Path(r"C:\Users\daniel.olivera\Documents\Intelica\apps\interchange-standar-2.0\tst")
     ####################################################################################
 
     log.logger.debug(f"build_lookup_691")
@@ -81,10 +81,6 @@ def calculate_1240_fields(
 
         log.logger.debug(f"Reading parquet for {client_id} file {file_id}")
         file_dt_raw = str(df["file_dt"].iloc[0]).strip()
-
-        log.logger.debug("df_exclude_flag")
-        df_excluded = df_exclude_flag(df,filepath,lookup_691)
-        # df_excluded.to_csv(out_dir / f"df_excluded_flag_{client_id}_{file_id}.csv", index=False)
 
         log.logger.debug("calculate_iar_unique")
         if df_iar_unique is None or file_dt_raw != iar_file_dt:
@@ -125,8 +121,18 @@ def calculate_1240_fields(
             parquet=filepath
         )
 
+        log.logger.debug("add exclude flag")
+
+        df_exclude = create_df_exclude_flag(df,filepath,lookup_691)
+
+        df_final = add_exclude_flag(
+            df=df_final,
+            df_exclude=df_exclude
+        )
+
         log.logger.debug("cast_df_from_layout")
         df_final = cast_df_from_layout(df_final, CALCULATE_FIELDS_FINAL)
+
 
         log.logger.debug("build_arrow_schema_from_layout")
         if schema is None:
@@ -207,7 +213,7 @@ def calculate_1442_fields(
         file_dt_raw = str(df["file_dt"].iloc[0]).strip()
 
         log.logger.debug("df_exclude_flag")
-        df_excluded = df_exclude_flag(df,filepath,lookup_691)
+        df_excluded = create_df_exclude_flag(df,filepath,lookup_691)
 
         log.logger.debug("calculate_iar_unique")
         if df_iar_unique is None or file_dt_raw != iar_file_dt:
@@ -246,6 +252,15 @@ def calculate_1442_fields(
             df_pre2=df_pre_2, 
             df_amount=df_amount, 
             parquet=filepath
+        )
+
+        log.logger.debug("add exclude flag")
+
+        df_exclude = create_df_exclude_flag(df,filepath,lookup_691)
+
+        df_final = add_exclude_flag(
+            df=df_final,
+            df_exclude=df_exclude
         )
 
         log.logger.debug("cast_df_from_layout")

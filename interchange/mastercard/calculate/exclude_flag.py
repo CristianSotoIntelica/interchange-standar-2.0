@@ -58,7 +58,7 @@ def build_lookup_691(
 
 
 
-def df_exclude_flag(
+def create_df_exclude_flag(
     df: pd.DataFrame,    
     filepath: str,
     lookup_691: dict
@@ -72,12 +72,30 @@ def df_exclude_flag(
         valid_x = lookup_691[file_identif]
         mask = df["message_number_de_71"].isin(valid_x)
 
-        # sanity check opcional
-        #if mask.sum() > 1:
-        #    raise ValueError(
-        #        f"Más de un match en {filepath} para file_identif={file_identif}"
-        #    )
-
         df.loc[mask, "exclude_flag"] = 1
+    
+    df_excluded = df[df["exclude_flag"] == 1]
 
-    return df
+    cols_to_keep = ["file_idn", "file_dt", "type_mti", "ref_id", "exclude_flag"]
+    existing_cols = [c for c in cols_to_keep if c in df_excluded.columns]
+
+    return df_excluded.loc[:, existing_cols]
+
+def add_exclude_flag(
+        df: pd.DataFrame,
+        df_exclude: pd.DataFrame,
+) -> pd.DataFrame:
+    df["exclude_flag"] = 0 
+    keys = ["file_idn", "file_dt", "type_mti", "ref_id"]
+
+    df_final = df.merge(
+        df_exclude, 
+        on=keys,
+        how="left", 
+        suffixes=("", "_ex")
+    )
+
+    df_final["exclude_flag"] = df_final["exclude_flag_ex"].fillna(df_final["exclude_flag"]).astype("int64")
+    df_final = df_final.drop(columns=["exclude_flag_ex"])
+
+    return df_final
