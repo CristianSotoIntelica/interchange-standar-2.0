@@ -949,11 +949,11 @@ def calculate_mastercard_fee(
          AND ex_settle.brand_u = upper('{brand_fx_eval}')
         """
 
-        out_dir = Path.cwd() / "debug_rule_engine"   # se crea en tu carpeta actual (normalmente el repo) / "debug_rule_engine"
-        out_dir.mkdir(exist_ok=True)
+        # out_dir = Path.cwd() / "debug_rule_engine"   # se crea en tu carpeta actual (normalmente el repo) / "debug_rule_engine"
+        # out_dir.mkdir(exist_ok=True)
       
-        df_base_fin = con.execute(sql).df()
-        df_base_fin.to_csv(out_dir / "df_base_fin.csv", index=False)
+        # df_base_fin = con.execute(sql).df()
+        # df_base_fin.to_csv(out_dir / "df_base_fin.csv", index=False)
 
         return con.execute(sql).df()
 

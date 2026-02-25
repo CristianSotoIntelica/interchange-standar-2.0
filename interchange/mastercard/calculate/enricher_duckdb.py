@@ -223,15 +223,20 @@ def calculate_pre2_duckdb(
 
             LEFT JOIN client c 
             ON TRUE
-        )
+        ),
 
-        SELECT 
-        *,
-        row_number() OVER (
+        ranked AS (
+            SELECT 
+            *, 
+            row_number() OVER (
             PARTITION BY ref_id, file_id, file_idn
             ORDER BY app_date_valid DESC, high_key_for_range DESC
         ) AS n 
-        FROM joined
+        FROM joined 
+        )
+        SELECT * 
+        from ranked 
+        WHERE n = 1 
         """
 
         log.logger.debug(
@@ -325,12 +330,6 @@ def calculate_ex_rate_duckdb(
 
     try:
 
-        # out_dir = Path("/home/ameza/IntelicaProyectos/standard-2.0/interchange-standar-2.0/tst")
-
-        # df_client .to_csv(out_dir / f"df_client.csv", index=False)
-        # df_curr.to_csv(out_dir / f"df_curr.csv", index=False)
-        # df_ex.to_csv(out_dir / f"ex.csv", index=False)
-        
         con.register("cus", df_client)
         con.register("cur", df_curr)
         con.register("ex", df_ex)
