@@ -287,8 +287,8 @@ if __name__ == "__main__":
 
     client_id = "SBSA" # LISTO - VALIDADO
     # file_id = "85e91f44241d19d8bf23ce97d2bf49c9" # incoming | MasterCard_Inward_Settlement_to_SBSA_T112_20260113.TXT | 
-    # file_id = "074b0b73807ff7833e900149225182d2" # incoming | MasterCard_Inward_Settlement_to_SBSA_T112_20260218.TXT |
-    file_id = "5055a175555561b9ebbfa174597768d4" # outgoing | MasterCard_Outward_Settlement_from_SBSA_R111_20260218.TXT | # error validar
+    file_id = "074b0b73807ff7833e900149225182d2" # incoming | MasterCard_Inward_Settlement_to_SBSA_T112_20260218.TXT |
+    # file_id = "5055a175555561b9ebbfa174597768d4" # outgoing | MasterCard_Outward_Settlement_from_SBSA_R111_20260218.TXT |
     
     # client_id = "BTRLRO" # LISTO - VALIDADO
     # file_id = "a3711894ebf22d0583df63cc5b5232dc" # Incoming | MCI.AR.T112.M.E0078853.D260107.T004452.A003 |
@@ -321,7 +321,6 @@ if __name__ == "__main__":
     pipeline_mc_1240(client_id=client_id, file_id=file_id)
     pipeline_mc_1442(client_id=client_id, file_id=file_id)
     pipeline_mc_1740(client_id=client_id, file_id=file_id)
-
 
     #(client_id=client_id, file_id=file_id)
     # pipeline_mc_1644(client_id=client_id, file_id=file_id)

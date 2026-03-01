@@ -82,7 +82,7 @@ def clean_1644_fields(
     field_defs = load_mc_field_dtype_definitions()
     field_defs = extend_field_defs_with_base_cols(field_defs)
     
-    for filepath in list_filepaths:
+    for i, filepath in enumerate(list_filepaths):
         fc = extract_fc_from_filepath(filepath)
 
         if fc not in VALID_FC_1644:
@@ -95,10 +95,8 @@ def clean_1644_fields(
         )
 
         # Cast + normalize. This step also ensures output columns follow a deterministic order.
-        df_cast = cast_df_from_params_def(
-            df=df, 
-            param=field_defs
-        )
+        df_cast = cast_df_from_params_def(df=df, param=field_defs)
+        del df
 
         # Arrow schema must match the final column order written to parquet.
         schema = build_arrow_schema_from_params(
@@ -125,6 +123,8 @@ def clean_1644_fields(
             index=False, 
             schema=schema
         )
+        del df_cast
+        
 
 def clean_1240_fields(
         origin_layer: FileStorage.Layer,
@@ -181,6 +181,8 @@ def clean_1240_fields(
     - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S".
     - Schema is built from the first processed file and reused; assumes all files share compatible columns.
     """
+    
+
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer,
         client_id=client_id,
@@ -201,7 +203,8 @@ def clean_1240_fields(
     # Build the schema once (first file) to avoid repeating work.
     schema = None
 
-    for filepath in list_filepaths:
+    for i, filepath in enumerate(list_filepaths):
+
         df = fs.read_parquet_by_filepath(
             client_id=client_id, 
             file_id=file_id, 
@@ -214,6 +217,7 @@ def clean_1240_fields(
             date_format="%y%m%d",
             timestamp_format="%y%m%d%H%M%S",
         )
+        del df
 
         if schema is None:
             # Arrow schema must match the final column order written to parquet.
@@ -224,7 +228,7 @@ def clean_1240_fields(
                 default_decimal_scale=2,
                 timestamp_unit="ns",
             )
-
+            
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,
             target_layer=target_layer,
@@ -234,12 +238,8 @@ def clean_1240_fields(
             mti="1240"
         )
             
-        fs.write_parquet_by_filepath(
-            df_cast, 
-            out_fp, 
-            index=False, 
-            schema=schema
-        )
+        fs.write_parquet_by_filepath(df_cast, out_fp, index=False, schema=schema)
+        del df_cast
 
 def clean_1442_fields(
         origin_layer: FileStorage.Layer,
@@ -296,6 +296,7 @@ def clean_1442_fields(
     - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S".
     - Schema is built from the first processed file and reused; assumes all files share compatible columns.
     """ 
+
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer,
         client_id=client_id,
@@ -316,12 +317,14 @@ def clean_1442_fields(
     # Build the schema once (first file) to avoid repeating work.
     schema = None
 
-    for filepath in list_filepaths:
+    for i, filepath in enumerate(list_filepaths):
+
         df = fs.read_parquet_by_filepath(
             client_id=client_id, 
             file_id=file_id, 
             filepath=filepath
         )
+        
         
         df_cast = cast_df_from_params_def(
             df=df,
@@ -329,7 +332,8 @@ def clean_1442_fields(
             date_format="%y%m%d",
             timestamp_format="%y%m%d%H%M%S",
         )
-
+        del df
+        
         if schema is None:
             # Arrow schema must match the final column order written to parquet.
             schema = build_arrow_schema_from_params(
@@ -349,13 +353,8 @@ def clean_1442_fields(
             mti="1442"
         )
             
-        fs.write_parquet_by_filepath(
-            df_cast, 
-            out_fp, 
-            index=False, 
-            schema=schema
-        )
-
+        fs.write_parquet_by_filepath(df_cast, out_fp, index=False, schema=schema)
+        del df_cast
 
 def clean_1740_fields(
         origin_layer: FileStorage.Layer,
@@ -412,6 +411,7 @@ def clean_1740_fields(
     - Uses 2-digit year formats: date_format="%y%m%d", timestamp_format="%y%m%d%H%M%S".
     - Schema is built from the first processed file and reused; assumes all files share compatible columns.
     """
+
     list_filepaths = fs.get_list_files_folderpath(
         layer=origin_layer,
         client_id=client_id,
@@ -425,7 +425,8 @@ def clean_1740_fields(
     # Build the schema once (first file) to avoid repeating work.
     schema = None
 
-    for filepath in list_filepaths:
+    for i, filepath in enumerate(list_filepaths):
+
         df = fs.read_parquet_by_filepath(
             client_id=client_id, 
             file_id=file_id, 
@@ -438,6 +439,7 @@ def clean_1740_fields(
             date_format="%y%m%d",
             timestamp_format="%y%m%d%H%M%S",
         )
+        del df
 
         if schema is None:
             # Arrow schema must match the final column order written to parquet.
@@ -449,7 +451,6 @@ def clean_1740_fields(
                 timestamp_unit="ns",
             )
 
-
         out_fp = fs.build_target_parquet_filepath_from_raw(
             raw_filepath=filepath,
             target_layer=target_layer,
@@ -459,9 +460,5 @@ def clean_1740_fields(
             mti="1740"
         )
             
-        fs.write_parquet_by_filepath(
-            df_cast, 
-            out_fp, 
-            index=False, 
-            schema=schema
-        )
+        fs.write_parquet_by_filepath(df_cast, out_fp, index=False, schema=schema)
+        del df_cast
