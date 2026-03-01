@@ -27,16 +27,41 @@ def _canonical_schema_from_de_spec(de_spec: dict) -> pa.Schema:
     return pa.schema(fields)
 
 def _ensure_and_cast(table: pa.Table, schema: pa.Schema) -> pa.Table:
-    # agrega columnas faltantes
-    missing = [n for n in schema.names if n not in table.schema.names]
-    if missing:
-        nrows = table.num_rows
-        for col in missing:
-            table = table.append_column(col, pa.nulls(nrows, type=schema.field(col).type))
+    """
+    Alinea la tabla al schema canonical: agrega columnas faltantes como nulls,
+    reordena y castea tipos.
 
-    # reordenar y castear
-    table = table.select(schema.names)
-    return table.cast(schema, safe=False)
+    POR QUÉ SE REESCRIBIÓ:
+      El código anterior usaba un loop de append_column que creaba una tabla
+      PyArrow nueva en cada iteración (~95 veces por bloque). PyArrow tables
+      son inmutables, así que cada append_column = copia completa de la tabla
+      anterior + columna nueva. Con cientos de bloques por archivo, esto
+      acumulaba GBs en el memory pool interno de PyArrow.
+
+      Ahora construimos todos los arrays en una lista primero (sin tablas
+      intermedias) y hacemos una única llamada pa.table() al final.
+      El peak de RAM pasa de ~2x tamaño tabla × N bloques → ~1x tamaño tabla.
+    """
+    present = set(table.schema.names)
+    nrows = table.num_rows
+
+    # Una sola pasada sobre el schema:
+    # - Si la columna existe: tomamos la referencia y casteamos si es necesario
+    # - Si no existe: creamos un array de nulls del tipo correcto
+    # Sin tablas intermedias, solo una lista de arrays.
+    arrays = []
+    for field in schema:
+        if field.name in present:
+            col = table.column(field.name)
+            if col.type != field.type:
+                col = col.cast(field.type, safe=False)
+            arrays.append(col)
+        else:
+            arrays.append(pa.nulls(nrows, type=field.type))
+
+    # Una única construcción de tabla al final con el schema exacto
+    return pa.table(arrays, schema=schema)
+
 
 def subdir_for_mti(mti: str) -> str:
     mti = str(mti)
@@ -52,7 +77,7 @@ def subdir_for_mti(mti: str) -> str:
 
 def _base_dir_for_subdir(fs, layer, client_id: str, file_id: str, subdir: str) -> Path:
     base = Path(fs._get_file_path(layer, client_id, file_id, subdir=subdir))
-    return base.parent  
+    return base.parent
 
 def write_parquet_by_mti_block_streaming(
     df_chunk: pd.DataFrame,
@@ -70,7 +95,6 @@ def write_parquet_by_mti_block_streaming(
         return
 
     for (file_idn, mti), g in df_chunk.groupby(["file_idn", "mti"], sort=False):
-        #block_i = int(block)
         file_idn = str(file_idn)
         mti_s = str(mti)
 
